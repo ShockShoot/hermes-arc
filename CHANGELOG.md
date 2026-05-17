@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.1.7 - 2026-05-17
+
+### Fixed
+- Release metadata is now consistent across `plugin.yaml`, `pyproject.toml`, and `CHANGELOG.md` so installers, update checks, package metadata, and GitHub releases report the same ARC version.
+- Added a release metadata smoke test and wired it into CI to prevent future version drift.
+
+### Verified
+- Confirmed the v2.1.x patcher can apply cleanly to the latest checked Hermes `origin/main` `run_agent.py` and verify all ARC compatibility markers: runtime overrides, final signature rendering, provider-aware transform hooks, topic fallback chains, and skipdetect message rewrite.
+
 ## 2.1.6 - 2026-05-16
 
 ### Added

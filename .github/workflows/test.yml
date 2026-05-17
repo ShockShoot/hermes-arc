@@ -24,3 +24,5 @@ jobs:
         run: python tests/test_fallback_config.py
       - name: Run skipdetect command test
         run: python tests/test_skipdetect.py
+      - name: Run release metadata test
+        run: python tests/test_release_metadata.py
