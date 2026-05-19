@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.1.8 - 2026-05-19
+
+### Fixed
+- `patch_run_agent.py` now supports Hermes v0.14+ where the main conversation loop moved from `run_agent.py` into `agent/conversation_loop.py`. Passing `--path .../run_agent.py` still works; the patcher detects and targets the real loop module automatically.
+- ARC runtime overrides, provider-aware signature rendering, topic fallback chains, system-prompt context injection, and skipdetect message rewrites are restored on the refactored Hermes core after an update.
+
+### Verified
+- Re-applied ARC compatibility patches to Hermes Agent v0.14.0 (`agent/conversation_loop.py`) and verified all ARC markers pass.
+
 ## 2.1.7 - 2026-05-17
 
 ### Fixed

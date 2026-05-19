@@ -275,6 +275,26 @@ def choose_run_agent_path(explicit_path: str | None = None, interactive: bool = 
     sys.exit(1)
 
 
+def resolve_patch_target(path: Path) -> Path:
+    """Return the file that owns the conversation loop for this Hermes runtime.
+
+    Hermes v0.14+ moved ``run_conversation`` out of ``run_agent.py`` into
+    ``agent/conversation_loop.py`` while keeping ``run_agent.py`` as a thin
+    forwarder. Keep the public CLI contract accepting ``--path run_agent.py``
+    but patch/check the module that actually contains plugin hooks.
+    """
+    if path.name == "run_agent.py":
+        modular = path.parent / "agent" / "conversation_loop.py"
+        if modular.exists():
+            try:
+                text = modular.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                text = ""
+            if "pre_llm_call" in text and "def run_conversation" in text:
+                return modular
+    return path
+
+
 def check_runtime_override_handling(content: str) -> dict:
     """Check if run_agent.py handles runtime_override from pre_llm_call hooks."""
     results = {}
@@ -292,7 +312,7 @@ def check_runtime_override_handling(content: str) -> dict:
         and "_arc_signature" in content
     )
     results["sends_provider_in_transform_hook"] = bool(
-        re.search(r'transform_llm_output.*provider\s*=\s*self\.provider', content, re.DOTALL)
+        re.search(r'transform_llm_output.*provider\s*=\s*(?:self|agent)\.provider', content, re.DOTALL)
     )
     results["supports_topic_fallback_chain"] = "HERMES_ARC_TOPIC_FALLBACK_PATCH" in content
     results["supports_skipdetect_message_rewrite"] = "HERMES_ARC_SKIPDETECT_PATCH" in content
@@ -325,6 +345,283 @@ def apply_patch(path: Path, content: str) -> str:
     3. transform_llm_output provider injection
     """
     new_content = content
+
+    is_modular_loop = "def run_conversation(\n    agent," in new_content or "agent.conversation_loop" in new_content
+    if is_modular_loop:
+        if "_runtime_override = {}" not in new_content:
+            init_old = '    _plugin_user_context = ""\n    try:\n'
+            init_new = (
+                '    _plugin_user_context = ""\n'
+                '    # HERMES_ARC_PATCH: runtime_override support\n'
+                '    _runtime_override = {}\n'
+                '    _plugin_system_prompt = ""  # HERMES_ARC_SYSTEM_PROMPT_PATCH\n'
+                '    try:\n'
+            )
+            if init_old in new_content:
+                new_content = new_content.replace(init_old, init_new, 1)
+            else:
+                print("⚠️  Could not locate modular pre_llm_call initialization — init patch skipped")
+
+        if '_arc_ov = r.get("runtime_override")' not in new_content:
+            loop_old = (
+                '        for r in _pre_results:\n'
+                '            if isinstance(r, dict) and r.get("context"):\n'
+                '                _ctx_parts.append(str(r["context"]))\n'
+                '            elif isinstance(r, str) and r.strip():\n'
+                '                _ctx_parts.append(r)\n'
+                '        if _ctx_parts:\n'
+                '            _plugin_user_context = "\\n\\n".join(_ctx_parts)\n'
+            )
+            loop_new = (
+                '        for r in _pre_results:\n'
+                '            if isinstance(r, dict):\n'
+                '                if r.get("context"):\n'
+                '                    _ctx_parts.append(str(r["context"]))\n'
+                '                _arc_ov = r.get("runtime_override")\n'
+                '                if isinstance(_arc_ov, dict):\n'
+                '                    _runtime_override.update(_arc_ov)\n'
+                '            elif isinstance(r, str) and r.strip():\n'
+                '                _ctx_parts.append(r)\n'
+                '        # HERMES_ARC_SYSTEM_PROMPT_PATCH: capture system prompt override\n'
+                '        _arc_sys = _runtime_override.get("system_prompt")\n'
+                '        if _arc_sys:\n'
+                '            _plugin_system_prompt = str(_arc_sys)\n'
+                '            _ctx_parts.append(_plugin_system_prompt)\n'
+                '        if _ctx_parts:\n'
+                '            _plugin_user_context = "\\n\\n".join(_ctx_parts)\n'
+            )
+            if loop_old in new_content:
+                new_content = new_content.replace(loop_old, loop_new, 1)
+            else:
+                print("⚠️  Could not locate modular pre_llm_call result loop — collect patch skipped")
+
+        if "_arc_resolve_provider_client" not in new_content:
+            ctx_old = '        if _ctx_parts:\n            _plugin_user_context = "\\n\\n".join(_ctx_parts)\n'
+            runtime_block = '''        if _ctx_parts:
+            _plugin_user_context = "\\n\\n".join(_ctx_parts)
+
+        # HERMES_ARC_SKIPDETECT_PATCH: allow router plugins to rewrite the
+        # current turn user message after inspecting a command prefix.
+        _arc_user_message = _runtime_override.get("user_message")
+        if isinstance(_arc_user_message, str):
+            user_message = _arc_user_message
+            original_user_message = _arc_user_message
+            try:
+                user_msg["content"] = _arc_user_message
+                agent._persist_user_message_override = _arc_user_message
+            except Exception:
+                pass
+
+        # HERMES_ARC_PATCH: apply runtime routing overrides from plugins.
+        # Use Hermes' own switch_model() instead of mutating attributes
+        # directly — preserves provider-specific api_mode, OAuth, headers,
+        # context-compressor metadata, and client rebuild logic.
+        if isinstance(_runtime_override, dict) and _runtime_override:
+            _arc_restore_main = bool(_runtime_override.get("restore_main"))
+            _arc_model = _runtime_override.get("model")
+            _arc_provider = _runtime_override.get("provider")
+            _arc_base_url = _runtime_override.get("base_url")
+            _arc_api_key = _runtime_override.get("api_key")
+            _arc_api_mode = _runtime_override.get("api_mode")
+
+            if not hasattr(agent, "_hermes_arc_base_runtime"):
+                agent._hermes_arc_base_runtime = {
+                    "model": getattr(agent, "model", ""),
+                    "provider": getattr(agent, "provider", ""),
+                    "base_url": getattr(agent, "base_url", ""),
+                    "api_key": getattr(agent, "api_key", ""),
+                    "api_mode": getattr(agent, "api_mode", ""),
+                    "fallback_chain": list(getattr(agent, "_fallback_chain", []) or []),
+                }
+
+            if _arc_restore_main:
+                _arc_base = getattr(agent, "_hermes_arc_base_runtime", None) or {}
+                _base_model = _arc_base.get("model")
+                _base_provider = _arc_base.get("provider")
+                if _base_model and _base_provider:
+                    if hasattr(agent, "switch_model"):
+                        agent.switch_model(
+                            _base_model,
+                            _base_provider,
+                            api_key=_arc_base.get("api_key", ""),
+                            base_url=_arc_base.get("base_url", ""),
+                            api_mode=_arc_base.get("api_mode", ""),
+                        )
+                    else:
+                        agent.model = str(_base_model)
+                        agent.provider = str(_base_provider)
+                        if _arc_base.get("base_url"):
+                            agent.base_url = str(_arc_base.get("base_url")).rstrip("/")
+                        if _arc_base.get("api_key"):
+                            agent.api_key = str(_arc_base.get("api_key"))
+                    _base_fallback_chain = [
+                        f for f in (_arc_base.get("fallback_chain") or [])
+                        if isinstance(f, dict) and f.get("provider") and f.get("model")
+                    ]
+                    agent._fallback_chain = list(_base_fallback_chain)
+                    agent._fallback_model = agent._fallback_chain[0] if agent._fallback_chain else None
+                    agent._fallback_index = 0
+                    agent._fallback_activated = False
+                    logger.info(
+                        "hermes-arc: restored main runtime provider=%s model=%s fallbacks=%d",
+                        getattr(agent, "provider", ""),
+                        getattr(agent, "model", ""),
+                        len(agent._fallback_chain),
+                    )
+            elif _arc_model or _arc_provider or _arc_base_url or _arc_api_key:
+                _target_provider = str(_arc_provider or getattr(agent, "provider", "") or "auto")
+                _target_model = str(_arc_model or getattr(agent, "model", ""))
+                _resolved_model = _target_model
+                _resolved_api_key = str(_arc_api_key or "")
+                _resolved_base_url = str(_arc_base_url or "")
+                _resolved_api_mode = str(_arc_api_mode or "")
+
+                try:
+                    from agent.auxiliary_client import resolve_provider_client as _arc_resolve_provider_client
+                    _arc_client, _arc_client_model = _arc_resolve_provider_client(
+                        _target_provider,
+                        model=_target_model,
+                        raw_codex=True,
+                        explicit_base_url=_resolved_base_url or None,
+                        explicit_api_key=_resolved_api_key or None,
+                        api_mode=_resolved_api_mode or None,
+                        main_runtime=getattr(agent, "_primary_runtime", None),
+                    )
+                    if _arc_client is not None:
+                        _resolved_model = str(_arc_client_model or _target_model)
+                        _resolved_api_key = str(getattr(_arc_client, "api_key", "") or _resolved_api_key)
+                        _resolved_base_url = str(getattr(_arc_client, "base_url", "") or _resolved_base_url).rstrip("/")
+                except Exception as _arc_resolve_error:
+                    logger.debug("hermes-arc: provider resolution skipped: %s", _arc_resolve_error)
+
+                if not _resolved_api_mode:
+                    try:
+                        from hermes_cli.providers import determine_api_mode as _arc_determine_api_mode
+                        _resolved_api_mode = _arc_determine_api_mode(_target_provider, _resolved_base_url)
+                    except Exception:
+                        _resolved_api_mode = getattr(agent, "api_mode", "")
+
+                if hasattr(agent, "switch_model"):
+                    agent.switch_model(
+                        _resolved_model,
+                        _target_provider,
+                        api_key=_resolved_api_key,
+                        base_url=_resolved_base_url,
+                        api_mode=_resolved_api_mode,
+                    )
+                else:
+                    agent.model = str(_resolved_model)
+                    agent.provider = str(_target_provider)
+                    if _resolved_base_url:
+                        agent.base_url = _resolved_base_url
+                    if _resolved_api_key:
+                        agent.api_key = _resolved_api_key
+
+                # HERMES_ARC_TOPIC_FALLBACK_PATCH: optional topic-scoped
+                # fallback chain supplied by topic_detect runtime_override.
+                _arc_fb_chain_raw = _runtime_override.get("fallback_chain")
+                if isinstance(_arc_fb_chain_raw, list):
+                    _arc_topic_fb_chain = [
+                        f for f in _arc_fb_chain_raw
+                        if isinstance(f, dict) and f.get("provider") and f.get("model")
+                    ]
+                    _arc_base = getattr(agent, "_hermes_arc_base_runtime", None) or {}
+                    _arc_global_fb_chain = [
+                        f for f in (_arc_base.get("fallback_chain") or [])
+                        if isinstance(f, dict) and f.get("provider") and f.get("model")
+                    ]
+                    agent._fallback_chain = list(_arc_topic_fb_chain) + list(_arc_global_fb_chain)
+                    agent._fallback_model = agent._fallback_chain[0] if agent._fallback_chain else None
+                    agent._fallback_index = 0
+                    agent._fallback_activated = False
+                    logger.info(
+                        "hermes-arc: topic fallback chain loaded topic_entries=%d global_entries=%d total=%d",
+                        len(_arc_topic_fb_chain),
+                        len(_arc_global_fb_chain),
+                        len(agent._fallback_chain),
+                    )
+
+                logger.info(
+                    "hermes-arc: runtime_override applied provider=%s model=%s api_mode=%s",
+                    getattr(agent, "provider", ""),
+                    getattr(agent, "model", ""),
+                    getattr(agent, "api_mode", ""),
+                )
+'''
+            if ctx_old in new_content:
+                new_content = new_content.replace(ctx_old, runtime_block, 1)
+            else:
+                print("⚠️  Could not locate modular context assembly — runtime patch skipped")
+
+        if "HERMES_ARC_TRANSFORM_PROVIDER_PATCH" not in new_content:
+            old_hook = '''            _transform_results = _invoke_hook(
+                "transform_llm_output",
+                response_text=final_response,
+                session_id=agent.session_id or "",
+                model=agent.model,
+                platform=getattr(agent, "platform", None) or "",
+            )'''
+            new_hook = '''            # HERMES_ARC_TRANSFORM_PROVIDER_PATCH: add provider for signature rebuild
+            _transform_results = _invoke_hook(
+                "transform_llm_output",
+                response_text=final_response,
+                session_id=agent.session_id or "",
+                model=agent.model,
+                provider=agent.provider,
+                platform=getattr(agent, "platform", None) or "",
+            )'''
+            if old_hook in new_content:
+                new_content = new_content.replace(old_hook, new_hook, 1)
+            else:
+                print("⚠️  Could not locate modular transform_llm_output hook call — provider patch skipped")
+
+        if "_arc_signature" not in new_content:
+            suffix_marker = '    # Plugin hook: post_llm_call'
+            suffix_block = '''    # HERMES_ARC_RESPONSE_SUFFIX_PATCH: render ARC signature from
+    # _runtime_override (structured _arc_signature dict) and the final
+    # model/provider after any fallback occurred.
+    if final_response and not interrupted:
+        try:
+            _arc_sig = (_runtime_override or {}).get("_arc_signature")
+            if isinstance(_arc_sig, dict):
+                try:
+                    from hermes_cli.plugins import invoke_hook as _arc_inv
+                    _arc_final_sig_results = _arc_inv(
+                        "transform_llm_output",
+                        response_text="",
+                        session_id=agent.session_id or "",
+                        model=agent.model,
+                        provider=agent.provider,
+                        platform=getattr(agent, "platform", None) or "",
+                        _arc_finalize=_arc_sig,
+                    )
+                    for _arc_hr in _arc_final_sig_results:
+                        if isinstance(_arc_hr, str) and _arc_hr:
+                            final_response = final_response.rstrip() + "\\n\\n" + _arc_hr
+                            break
+                except Exception:
+                    _routed = _arc_sig.get("routed_model", "")
+                    _routed_p = _arc_sig.get("routed_provider", "")
+                    _final_m = agent.model or ""
+                    _final_p = agent.provider or ""
+                    _topic = _arc_sig.get("topic", "")
+                    _short = lambda m: m.split("/")[-1] if "/" in m else m
+                    if _short(_final_m) == _short(_routed) and _final_p == _routed_p:
+                        _arc_suffix = f"- {_short(_final_m)} [{_topic}]"
+                    else:
+                        _arc_suffix = f"- {_short(_final_m)} [{_topic} | routed: {_short(_routed)}]"
+                    if _arc_suffix:
+                        final_response = final_response.rstrip() + "\\n\\n" + _arc_suffix
+        except Exception:
+            logger.debug("hermes-arc: response suffix render failed")
+
+'''
+            if suffix_marker in new_content:
+                new_content = new_content.replace(suffix_marker, suffix_block + suffix_marker, 1)
+            else:
+                print("⚠️  Could not locate modular post_llm_call hook boundary — suffix patch skipped")
+
+        return new_content
 
     # ─── Patch 1A: Add _runtime_override init before pre_llm_call block ───
     # Run each sub-patch independently so partially patched cores can be repaired.
@@ -716,7 +1013,7 @@ def verify_patch(content: str) -> dict:
     checks["_arc_signature"] = "_arc_signature" in content
     checks["HERMES_ARC_TRANSFORM_PROVIDER_PATCH"] = "HERMES_ARC_TRANSFORM_PROVIDER_PATCH" in content
     checks["provider=self.provider in transform hook"] = bool(
-        re.search(r'transform_llm_output[\s\S]{0,200}provider\s*=\s*self\.provider', content)
+        re.search(r'transform_llm_output[\s\S]{0,240}provider\s*=\s*(?:self|agent)\.provider', content)
     )
     checks["HERMES_ARC_SYSTEM_PROMPT_PATCH"] = "HERMES_ARC_SYSTEM_PROMPT_PATCH" in content
     checks["HERMES_ARC_TOPIC_FALLBACK_PATCH"] = "HERMES_ARC_TOPIC_FALLBACK_PATCH" in content
@@ -744,7 +1041,10 @@ def main():
         sys.exit(1)
 
     path = choose_run_agent_path(args.path)
-    content = path.read_text(encoding="utf-8", errors="ignore")
+    patch_path = resolve_patch_target(path)
+    if patch_path != path:
+        print(f"ℹ️  Hermes conversation loop moved; targeting: {patch_path}")
+    content = patch_path.read_text(encoding="utf-8", errors="ignore")
 
     if args.check:
         results = check_runtime_override_handling(content)
@@ -758,22 +1058,22 @@ def main():
             print("\n✅ All checks passed — no patch needed.")
 
     if args.patch:
-        new_content = apply_patch(path, content)
+        new_content = apply_patch(patch_path, content)
         if new_content == content:
             print("✅ Already patched or patch could not be applied — no changes made.")
         else:
-            backup = path.with_suffix(path.suffix + BACKUP_SUFFIX)
+            backup = patch_path.with_suffix(patch_path.suffix + BACKUP_SUFFIX)
             if not backup.exists():
-                shutil.copy2(path, backup)
+                shutil.copy2(patch_path, backup)
                 print(f"📦 Backup created: {backup}")
-            path.write_text(new_content, encoding="utf-8")
+            patch_path.write_text(new_content, encoding="utf-8")
             content = new_content
             print("✅ Patch applied successfully.")
 
     if args.verify:
         # Re-read after --patch so `--patch --verify` verifies the file on disk,
         # not the pre-patch content captured at startup.
-        content = path.read_text(encoding="utf-8", errors="ignore")
+        content = patch_path.read_text(encoding="utf-8", errors="ignore")
         checks = verify_patch(content)
         print("🔍 Hermes ARC patch verification:")
         all_ok = True
