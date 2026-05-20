@@ -251,6 +251,7 @@ FILES=(
   patch_run_agent.py
   AGENTS.md
   plugin.yaml
+  pyproject.toml
   update_checker.py
   README.md
   README_TH.md
@@ -260,6 +261,11 @@ FILES=(
   docs/FALLBACK_CHAINS.md
   docs/V2_REWRITE_PLAN.md
   docs/V3_SMART_ROUTER.md
+  tests/test_fallback_config.py
+  tests/test_release_metadata.py
+  tests/test_signature_finalize.py
+  tests/test_skipdetect.py
+  tests/test_v2_classifier.py
 )
 
 # ── Download or copy ────────────────────────────────────────────────────────
