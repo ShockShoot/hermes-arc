@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.9 - 2026-05-29
+
+### Verified
+- Re-applied ARC compatibility patches to Hermes Agent v0.15.1 (`agent/conversation_loop.py`) after an upstream update and verified all runtime override, fallback-chain, skipdetect, and signature markers pass.
+
+### Changed
+- Release metadata refreshed so update checks and GitHub releases report the latest verified Hermes compatibility window.
+
 ## 2.1.8 - 2026-05-19
 
 ### Fixed
