@@ -244,8 +244,8 @@ def choose_run_agent_path(explicit_path: str | None = None, interactive: bool = 
     """Choose a run_agent.py path, prompting when multiple candidates exist."""
     if explicit_path:
         path = Path(explicit_path).expanduser().resolve()
-        if not _looks_like_hermes_run_agent(path):
-            print(f"❌ Not a valid Hermes run_agent.py: {path}")
+        if not _looks_like_hermes_runtime_file(path):
+            print(f"❌ Not a valid Hermes runtime file: {path}")
             sys.exit(1)
         return path
 
@@ -304,8 +304,8 @@ def check_runtime_override_handling(content: str) -> dict:
     results["reads_runtime_override"] = "_runtime_override" in content and "runtime_override" in content
     results["uses_switch_model_runtime"] = bool(
         "switch_model(" in content
-        and "_arc_resolve_provider_client" in content
         and "_hermes_arc_base_runtime" in content
+        and ("_arc_resolve_provider_client" in content or "runtime override switch failed" in content)
     )
     results["handles_response_suffix"] = bool(
         "HERMES_ARC_RESPONSE_SUFFIX_PATCH" in content
@@ -1007,7 +1007,10 @@ def verify_patch(content: str) -> dict:
     checks["HERMES_ARC_PATCH marker"] = "HERMES_ARC_PATCH: runtime_override support" in content
     checks["_runtime_override init"] = "_runtime_override = {}" in content
     checks["runtime_override collect"] = '_arc_ov = r.get("runtime_override")' in content
-    checks["switch_model call"] = "switch_model(" in content and "_arc_resolve_provider_client" in content
+    checks["switch_model call"] = (
+        "switch_model(" in content
+        and ("_arc_resolve_provider_client" in content or "runtime override switch failed" in content)
+    )
     checks["_hermes_arc_base_runtime"] = "_hermes_arc_base_runtime" in content
     checks["HERMES_ARC_RESPONSE_SUFFIX_PATCH"] = "HERMES_ARC_RESPONSE_SUFFIX_PATCH" in content
     checks["_arc_signature"] = "_arc_signature" in content
@@ -1021,6 +1024,238 @@ def verify_patch(content: str) -> dict:
 
     return checks
 
+
+
+# HERMES ARC v2.2 split-runtime support (Hermes v0.16+)
+def _looks_like_hermes_conversation_loop(path: Path) -> bool:
+    try:
+        return path.is_file() and path.name == "conversation_loop.py" and "def run_conversation" in path.read_text(encoding="utf-8", errors="ignore")[:250_000]
+    except OSError:
+        return False
+
+def _looks_like_hermes_turn_context(path: Path) -> bool:
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")[:120_000]
+        return path.is_file() and path.name == "turn_context.py" and "def build_turn_context" in text and "pre_llm_call" in text
+    except OSError:
+        return False
+
+def _looks_like_hermes_turn_finalizer(path: Path) -> bool:
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")[:120_000]
+        return path.is_file() and path.name == "turn_finalizer.py" and "def finalize_turn" in text and "transform_llm_output" in text
+    except OSError:
+        return False
+
+def _looks_like_hermes_runtime_file(path: Path) -> bool:
+    return _looks_like_hermes_run_agent(path) or _looks_like_hermes_conversation_loop(path) or _looks_like_hermes_turn_context(path) or _looks_like_hermes_turn_finalizer(path)
+
+def resolve_patch_files(path: Path) -> list[Path]:
+    path = path.expanduser().resolve()
+    if path.name == "run_agent.py":
+        base = path.parent / "agent"
+    elif path.name in {"conversation_loop.py", "turn_context.py", "turn_finalizer.py"}:
+        base = path.parent
+    else:
+        return [path]
+    loop, ctx, fin = base / "conversation_loop.py", base / "turn_context.py", base / "turn_finalizer.py"
+    if _looks_like_hermes_conversation_loop(loop):
+        files = [loop]
+        if _looks_like_hermes_turn_context(ctx): files.append(ctx)
+        if _looks_like_hermes_turn_finalizer(fin): files.append(fin)
+        return files
+    return [path]
+
+def _combined_runtime_text(files: list[Path]) -> str:
+    return "\n\n".join(p.read_text(encoding="utf-8", errors="ignore") for p in files if p.exists())
+
+def _patch_split_turn_context(text: str) -> str:
+    new = text
+    start_old = '''    # Restore the primary runtime if the previous turn activated fallback.
+    agent._restore_primary_runtime()
+'''
+    start_new = '''    # Restore the primary runtime if the previous turn activated fallback.
+    agent._restore_primary_runtime()
+
+    # HERMES_ARC_PATCH: runtime_override support for Hermes' split turn prologue.
+    _arc_base_runtime = getattr(agent, "_hermes_arc_base_runtime", None)
+    if isinstance(_arc_base_runtime, dict) and _arc_base_runtime:
+        try:
+            if (getattr(agent, "model", "") != _arc_base_runtime.get("model")
+                    or getattr(agent, "provider", "") != _arc_base_runtime.get("provider")
+                    or getattr(agent, "base_url", "") != _arc_base_runtime.get("base_url")
+                    or getattr(agent, "api_mode", "") != _arc_base_runtime.get("api_mode")):
+                _arc_primary_snapshot = getattr(agent, "_primary_runtime", None)
+                agent.switch_model(_arc_base_runtime.get("model") or getattr(agent, "model", ""), _arc_base_runtime.get("provider") or getattr(agent, "provider", ""), _arc_base_runtime.get("api_key") or getattr(agent, "api_key", ""), _arc_base_runtime.get("base_url") or "", _arc_base_runtime.get("api_mode") or "")
+                if isinstance(_arc_primary_snapshot, dict):
+                    agent._primary_runtime = _arc_primary_snapshot
+            agent._fallback_chain = list(_arc_base_runtime.get("fallback_chain") or [])
+            agent._fallback_index = 0
+            agent._fallback_activated = False
+        except Exception as _arc_restore_exc:
+            logger.warning("HERMES_ARC_PATCH: failed to restore base runtime: %s", _arc_restore_exc)
+'''
+    if "HERMES_ARC_PATCH: runtime_override support for Hermes' split turn prologue" not in new and start_old in new:
+        new = new.replace(start_old, start_new, 1)
+    hook_old = '''    # Plugin hook: pre_llm_call (context injected into user message, not system prompt).
+    plugin_user_context = ""
+    try:
+        from hermes_cli.plugins import invoke_hook as _invoke_hook
+        _pre_results = _invoke_hook(
+            "pre_llm_call",
+            session_id=agent.session_id,
+            task_id=effective_task_id,
+            turn_id=turn_id,
+            user_message=original_user_message,
+            conversation_history=list(messages),
+            is_first_turn=(not bool(conversation_history)),
+            model=agent.model,
+            platform=getattr(agent, "platform", None) or "",
+            sender_id=getattr(agent, "_user_id", None) or "",
+        )
+        _ctx_parts: list[str] = []
+        for r in _pre_results:
+            if isinstance(r, dict) and r.get("context"):
+                _ctx_parts.append(str(r["context"]))
+            elif isinstance(r, str) and r.strip():
+                _ctx_parts.append(r)
+        if _ctx_parts:
+            plugin_user_context = "\\n\\n".join(_ctx_parts)
+    except Exception as exc:
+        logger.warning("pre_llm_call hook failed: %s", exc)
+'''
+    hook_new = '''    # Plugin hook: pre_llm_call (context injected into user message, not system prompt).
+    plugin_user_context = ""
+    # HERMES_ARC_PATCH: collect runtime_override dicts returned by router plugins.
+    _runtime_override = {}
+    try:
+        from hermes_cli.plugins import invoke_hook as _invoke_hook
+        _pre_results = _invoke_hook(
+            "pre_llm_call",
+            session_id=agent.session_id,
+            task_id=effective_task_id,
+            turn_id=turn_id,
+            user_message=original_user_message,
+            conversation_history=list(messages),
+            is_first_turn=(not bool(conversation_history)),
+            model=agent.model,
+            provider=getattr(agent, "provider", ""),
+            base_url=getattr(agent, "base_url", ""),
+            api_mode=getattr(agent, "api_mode", ""),
+            platform=getattr(agent, "platform", None) or "",
+            sender_id=getattr(agent, "_user_id", None) or "",
+        )
+        _ctx_parts: list[str] = []
+        for r in _pre_results:
+            if isinstance(r, dict):
+                if r.get("context"):
+                    _ctx_parts.append(str(r["context"]))
+                _arc_ov = r.get("runtime_override")
+                if isinstance(_arc_ov, dict):
+                    _runtime_override.update(_arc_ov)
+            elif isinstance(r, str) and r.strip():
+                _ctx_parts.append(r)
+        _arc_sys = _runtime_override.get("system_prompt")
+        if _arc_sys:
+            _ctx_parts.append(str(_arc_sys))  # HERMES_ARC_SYSTEM_PROMPT_PATCH
+        _arc_user_message = _runtime_override.get("user_message")
+        if isinstance(_arc_user_message, str):
+            user_message = _arc_user_message
+            original_user_message = _arc_user_message
+            try:
+                messages[current_turn_user_idx]["content"] = _arc_user_message
+                agent._persist_user_message_override = _arc_user_message
+            except Exception:
+                pass  # HERMES_ARC_SKIPDETECT_PATCH
+        if isinstance(_runtime_override, dict) and _runtime_override:
+            if not hasattr(agent, "_hermes_arc_base_runtime"):
+                agent._hermes_arc_base_runtime = {"model": getattr(agent, "model", ""), "provider": getattr(agent, "provider", ""), "base_url": getattr(agent, "base_url", ""), "api_key": getattr(agent, "api_key", ""), "api_mode": getattr(agent, "api_mode", ""), "fallback_chain": list(getattr(agent, "_fallback_chain", []) or [])}
+            _arc_model = _runtime_override.get("model") or getattr(agent, "model", "")
+            _arc_provider = _runtime_override.get("provider") or getattr(agent, "provider", "")
+            if _arc_model or _arc_provider:
+                try:
+                    _arc_primary_snapshot = getattr(agent, "_primary_runtime", None)
+                    agent.switch_model(_arc_model, _arc_provider, _runtime_override.get("api_key") or getattr(agent, "api_key", ""), _runtime_override.get("base_url") or "", _runtime_override.get("api_mode") or "")
+                    if isinstance(_arc_primary_snapshot, dict):
+                        agent._primary_runtime = _arc_primary_snapshot
+                except Exception as _arc_switch_exc:
+                    logger.warning("HERMES_ARC_PATCH: runtime override switch failed: %s", _arc_switch_exc)
+            if "fallback_chain" in _runtime_override:
+                _arc_chain = _runtime_override.get("fallback_chain")
+                agent._fallback_chain = list(_arc_chain) if isinstance(_arc_chain, list) else []  # HERMES_ARC_TOPIC_FALLBACK_PATCH
+                agent._fallback_index = 0
+                agent._fallback_activated = False
+            _arc_signature = _runtime_override.get("_arc_signature")
+            agent._hermes_arc_signature = dict(_arc_signature) if isinstance(_arc_signature, dict) else None  # HERMES_ARC_RESPONSE_SUFFIX_PATCH
+        if _ctx_parts:
+            plugin_user_context = "\\n\\n".join(_ctx_parts)
+    except Exception as exc:
+        logger.warning("pre_llm_call hook failed: %s", exc)
+'''
+    if "HERMES_ARC_PATCH: collect runtime_override dicts" not in new and hook_old in new:
+        new = new.replace(hook_old, hook_new, 1)
+    return new
+
+def _patch_split_turn_finalizer(text: str) -> str:
+    new = text
+    transform_old = '''            _transform_results = _invoke_hook(
+                "transform_llm_output",
+                response_text=final_response,
+                session_id=agent.session_id or "",
+                model=agent.model,
+                platform=getattr(agent, "platform", None) or "",
+            )
+'''
+    transform_new = '''            _transform_results = _invoke_hook(
+                "transform_llm_output",
+                response_text=final_response,
+                session_id=agent.session_id or "",
+                model=agent.model,
+                provider=agent.provider,  # HERMES_ARC_TRANSFORM_PROVIDER_PATCH
+                base_url=agent.base_url,
+                api_mode=agent.api_mode,
+                platform=getattr(agent, "platform", None) or "",
+            )
+'''
+    if "HERMES_ARC_TRANSFORM_PROVIDER_PATCH" not in new and transform_old in new:
+        new = new.replace(transform_old, transform_new, 1)
+    suffix_old = '''            for _hook_result in _transform_results:
+                if isinstance(_hook_result, str) and _hook_result:
+                    final_response = _hook_result
+                    _response_transformed = True
+                    break  # First non-empty string wins
+'''
+    suffix_new = '''            for _hook_result in _transform_results:
+                if isinstance(_hook_result, str) and _hook_result:
+                    final_response = _hook_result
+                    _response_transformed = True
+                    break  # First non-empty string wins
+            # HERMES_ARC_RESPONSE_SUFFIX_PATCH: render structured ARC signature exactly once.
+            _arc_signature = getattr(agent, "_hermes_arc_signature", None)
+            if isinstance(_arc_signature, dict):
+                _arc_suffix_results = _invoke_hook("transform_llm_output", response_text="", session_id=agent.session_id or "", model=agent.model, provider=agent.provider, base_url=agent.base_url, api_mode=agent.api_mode, platform=getattr(agent, "platform", None) or "", _arc_finalize=_arc_signature)
+                for _arc_suffix in _arc_suffix_results:
+                    if isinstance(_arc_suffix, str) and _arc_suffix.strip():
+                        final_response = final_response.rstrip() + "\\n\\n" + _arc_suffix.strip()
+                        _response_transformed = True
+                        break
+                agent._hermes_arc_signature = None
+'''
+    if "HERMES_ARC_RESPONSE_SUFFIX_PATCH" not in new and suffix_old in new:
+        new = new.replace(suffix_old, suffix_new, 1)
+    return new
+
+def apply_split_runtime_patch(files: list[Path]) -> dict[Path, str]:
+    changed = {}
+    for f in files:
+        old = f.read_text(encoding="utf-8", errors="ignore")
+        new = _patch_split_turn_context(old) if f.name == "turn_context.py" else (_patch_split_turn_finalizer(old) if f.name == "turn_finalizer.py" else old)
+        if new != old:
+            changed[f] = new
+    return changed
+
+def verify_patch_files(files: list[Path]) -> dict:
+    return verify_patch(_combined_runtime_text(files))
 
 def main():
     parser = argparse.ArgumentParser(description="Hermes ARC run_agent.py patcher")
@@ -1041,10 +1276,12 @@ def main():
         sys.exit(1)
 
     path = choose_run_agent_path(args.path)
-    patch_path = resolve_patch_target(path)
-    if patch_path != path:
-        print(f"ℹ️  Hermes conversation loop moved; targeting: {patch_path}")
-    content = patch_path.read_text(encoding="utf-8", errors="ignore")
+    patch_files = resolve_patch_files(path)
+    if len(patch_files) > 1 or patch_files[0] != path:
+        print("ℹ️  Hermes runtime patch targets:")
+        for _file in patch_files:
+            print(f"   - {_file}")
+    content = _combined_runtime_text(patch_files)
 
     if args.check:
         results = check_runtime_override_handling(content)
@@ -1058,23 +1295,27 @@ def main():
             print("\n✅ All checks passed — no patch needed.")
 
     if args.patch:
-        new_content = apply_patch(patch_path, content)
-        if new_content == content:
+        changes = apply_split_runtime_patch(patch_files) if any(p.name in {"turn_context.py", "turn_finalizer.py"} for p in patch_files) else {}
+        if not changes and len(patch_files) == 1:
+            patch_path = patch_files[0]
+            original = patch_path.read_text(encoding="utf-8", errors="ignore")
+            patched = apply_patch(patch_path, original)
+            if patched != original:
+                changes[patch_path] = patched
+        if not changes:
             print("✅ Already patched or patch could not be applied — no changes made.")
         else:
-            backup = patch_path.with_suffix(patch_path.suffix + BACKUP_SUFFIX)
-            if not backup.exists():
-                shutil.copy2(patch_path, backup)
-                print(f"📦 Backup created: {backup}")
-            patch_path.write_text(new_content, encoding="utf-8")
-            content = new_content
-            print("✅ Patch applied successfully.")
+            for patch_path, new_content in changes.items():
+                backup = patch_path.with_suffix(patch_path.suffix + BACKUP_SUFFIX)
+                if not backup.exists():
+                    shutil.copy2(patch_path, backup)
+                    print(f"📦 Backup created: {backup}")
+                patch_path.write_text(new_content, encoding="utf-8")
+                print(f"✅ Patch applied: {patch_path}")
+            content = _combined_runtime_text(patch_files)
 
     if args.verify:
-        # Re-read after --patch so `--patch --verify` verifies the file on disk,
-        # not the pre-patch content captured at startup.
-        content = patch_path.read_text(encoding="utf-8", errors="ignore")
-        checks = verify_patch(content)
+        checks = verify_patch_files(patch_files)
         print("🔍 Hermes ARC patch verification:")
         all_ok = True
         for key, val in checks.items():
@@ -1086,6 +1327,7 @@ def main():
             print("\n✅ All patches verified successfully.")
         else:
             print("\n❌ Some patches missing or incomplete.")
+
 
 
 if __name__ == "__main__":

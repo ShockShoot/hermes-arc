@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.2.0 - 2026-06-12
+
+### Fixed
+- `patch_run_agent.py` now supports Hermes v0.16 split-runtime layout where `pre_llm_call` lives in `agent/turn_context.py` and final response transforms live in `agent/turn_finalizer.py`.
+- Runtime override routing, topic-scoped fallback chains, skipdetect message rewrites, and structured ARC signatures are restored after the latest Hermes update.
+- Explicit `--path .../agent/conversation_loop.py` is now accepted instead of being rejected as “not a valid run_agent.py”.
+
+### Verified
+- Re-applied ARC compatibility patches to Hermes Agent v0.16.0 and verified all ARC markers pass across `conversation_loop.py`, `turn_context.py`, and `turn_finalizer.py`.
+
 ## 2.1.9 - 2026-05-29
 
 ### Verified
