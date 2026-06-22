@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.1 - 2026-06-22
+
+### Verified
+- Re-applied ARC compatibility patches to Hermes Agent v0.17.0 (`agent/turn_context.py` and `agent/turn_finalizer.py`) after the latest Hermes update and verified all runtime override, fallback-chain, skipdetect, provider transform, and structured signature markers pass.
+
+### Changed
+- Release metadata refreshed so ARC update checks report the latest verified Hermes compatibility window.
+
 ## 2.2.0 - 2026-06-12
 
 ### Fixed
