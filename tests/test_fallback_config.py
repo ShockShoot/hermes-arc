@@ -35,8 +35,8 @@ topic_detect:
       fallbacks:
         - provider: openrouter
           model: baidu/cobuddy:free
-        - provider: nous
-          model: qwen/qwen3.6-plus
+        - provider: openrouter
+          model: deepseek/deepseek-v4-flash:free
 """.strip(),
         encoding="utf-8",
     )
@@ -57,15 +57,15 @@ assert software.model == "inclusionai/ring-2.6-1t:free"
 assert len(software.fallbacks) == 2
 assert software.fallbacks[0].provider == "openrouter"
 assert software.fallbacks[0].model == "baidu/cobuddy:free"
-assert software.fallbacks[1].provider == "nous"
-assert software.fallbacks[1].model == "qwen/qwen3.6-plus"
+assert software.fallbacks[1].provider == "openrouter"
+assert software.fallbacks[1].model == "deepseek/deepseek-v4-flash:free"
 
 updates = mod._runtime_updates(software)
 assert updates["model"] == "inclusionai/ring-2.6-1t:free"
 assert updates["provider"] == "openrouter"
 assert updates["fallback_chain"] == [
     {"provider": "openrouter", "model": "baidu/cobuddy:free"},
-    {"provider": "nous", "model": "qwen/qwen3.6-plus"},
+    {"provider": "openrouter", "model": "deepseek/deepseek-v4-flash:free"},
 ]
 
 software.fallbacks = []
@@ -73,3 +73,9 @@ updates_without_topic_fallbacks = mod._runtime_updates(software)
 assert updates_without_topic_fallbacks["fallback_chain"] == []
 
 print("PASS | fallback config loads and emits scoped runtime fallback_chain")
+
+
+def test_fallback_config_smoke() -> None:
+    # Module-level assertions above perform the smoke test during import;
+    # this wrapper makes the script pytest-collectable too.
+    assert True

@@ -83,3 +83,8 @@ assert mod._strip_skipdetect_prefix("/skip") is None
 assert mod._strip_skipdetect_prefix("/sdd calculate ROI") is None
 
 print("PASS | skipdetect aliases bypass classifier, restore main, strip prefix, sign [skip]")
+
+def test_skipdetect_smoke() -> None:
+    # Module-level assertions above perform the smoke test during import;
+    # this wrapper makes the script pytest-collectable too.
+    assert True

@@ -35,11 +35,11 @@ fallback_suffix = mod._transform_llm_output(
     provider="openrouter",
     _arc_finalize={
         "topic": "software_it",
-        "routed_model": "nvidia/nemotron-3-super-120b-a12b:free",
+        "routed_model": "inclusionai/ring-2.6-1t:free",
         "routed_provider": "openrouter",
     },
 )
-assert fallback_suffix == "- gemini-3-flash [software_it | routed: nemotron-3-super-120b-a12b]", fallback_suffix
+assert fallback_suffix == "- gemini-3-flash [software_it | routed: ring-2.6-1t]", fallback_suffix
 
 skip_suffix = mod._transform_llm_output(
     "",
@@ -55,3 +55,9 @@ skip_suffix = mod._transform_llm_output(
 assert skip_suffix == "- gpt-5.5 [skip]", skip_suffix
 
 print("PASS | _arc_finalize renders final ARC signature")
+
+
+def test_signature_finalize_smoke() -> None:
+    # Module-level assertions above perform the smoke test during import;
+    # this wrapper makes the script pytest-collectable too.
+    assert True

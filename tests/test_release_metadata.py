@@ -24,3 +24,9 @@ assert f"## {plugin_version} - " in changelog, (
 )
 
 print(f"PASS | release metadata is consistent for {plugin_version}")
+
+
+def test_release_metadata_smoke() -> None:
+    # Module-level assertions above perform the smoke test during import;
+    # this wrapper makes the script pytest-collectable too.
+    assert True

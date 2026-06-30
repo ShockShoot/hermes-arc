@@ -34,8 +34,8 @@ topic_detect:
       fallbacks:
         - provider: openrouter
           model: baidu/cobuddy:free
-        - provider: nous
-          model: qwen/qwen3.6-plus
+        - provider: openrouter
+          model: deepseek/deepseek-v4-flash:free
 ```
 
 Each fallback entry accepts the same fields as a primary topic target:
@@ -90,12 +90,12 @@ These are examples, not hard rules. Adjust them for your own quota, cost, latenc
 
 | Topic | Primary | Fallback 1 | Fallback 2 |
 |---|---|---|---|
-| `software_it` | ring-2.6-1t | cobuddy:free | qwen3.6-plus |
-| `math` | qwen3.6-plus | ring-2.6-1t | main/global |
-| `science` | qwen3.6-plus | owl-alpha | main/global |
-| `business_finance` | qwen3.6-plus | owl-alpha | main/global |
-| `legal_government` | owl-alpha | qwen3.6-plus | main/global |
-| `medicine_healthcare` | qwen3.6-plus | owl-alpha | main/global |
+| `software_it` | ring-2.6-1t | cobuddy:free | deepseek-v4-flash → owl-alpha |
+| `math` | deepseek-v4-flash | owl-alpha | ring-2.6-1t |
+| `science` | deepseek-v4-flash | owl-alpha | ring-2.6-1t |
+| `business_finance` | deepseek-v4-flash | owl-alpha | ring-2.6-1t |
+| `legal_government` | owl-alpha | deepseek-v4-flash | main/global |
+| `medicine_healthcare` | deepseek-v4-flash | owl-alpha | ring-2.6-1t |
 | `writing_language` | owl-alpha | step-3.5-flash | main/global |
 | `entertainment_media` | step-3.5-flash | owl-alpha | main/global |
 

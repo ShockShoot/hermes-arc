@@ -11,7 +11,7 @@ Examples:
 
 ```text
 - gpt-5.5 [general]
-- gemini-3-flash [software_it | routed: nemotron-3-super-120b-a12b]
+- gemini-3-flash [software_it | routed: ring-2.6-1t]
 ```
 
 ## Current v2.0.1 path

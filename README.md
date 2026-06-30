@@ -67,7 +67,7 @@ Example signatures:
 - minimax-m2.5 [business_finance]
 - glm-4.5-air [entertainment_media]
 - gpt-5.5 [general]
-- gemini-3-flash [software_it | routed: nemotron-3-super-120b-a12b]
+- gemini-3-flash [software_it | routed: ring-2.6-1t]
 ```
 
 Internally, ARC still uses `none` for “no specialist topic matched.” The user-facing signature renders that as `[general]` because it is clearer.
@@ -97,7 +97,7 @@ Shown suffix: - gpt-5.5 [general]
 
 User: debug this server, but the routed model falls back in Hermes
 ARC:  route=software_it, final responder differs from requested route model
-Shown suffix: - gemini-3-flash [software_it | routed: nemotron-3-super-120b-a12b]
+Shown suffix: - gemini-3-flash [software_it | routed: ring-2.6-1t]
 
 User: /sd fix this failing API test
 ARC:  skip classification and routing for this turn → main model
@@ -130,7 +130,7 @@ primary model  →  topic fallback 1  →  topic fallback 2  →  ...  →  Herm
 Example signature when a fallback fires:
 
 ```text
-gemini-3-flash [software_it | routed: nemotron-3-super-120b-a12b]
+gemini-3-flash [software_it | routed: ring-2.6-1t]
 ```
 
 This means ARC wanted `software_it`, but the final response came from `gemini-3-flash` after the primary fell back.
@@ -146,20 +146,20 @@ topic_detect:
       fallbacks:
         - provider: openrouter
           model: baidu/cobuddy:free
-        - provider: nous
-          model: qwen/qwen3.6-plus
+        - provider: openrouter
+          model: deepseek/deepseek-v4-flash:free
 ```
 
 Default fallback chain recommendations (adjust to your budget and latency needs):
 
 | Topic           | Primary                    | Fallback 1                  | Fallback 2            |
 |-----------------|----------------------------|-----------------------------|-----------------------|
-| `software_it`   | ring-2.6-1t                | cobuddy:free                | qwen3.6-plus          |
-| `math`          | qwen3.6-plus               | ring-2.6-1t                 | main/global           |
-| `science`       | qwen3.6-plus               | owl-alpha                   | main/global           |
-| `business_finance` | qwen3.6-plus             | owl-alpha                   | main/global           |
-| `legal_government` | owl-alpha               | qwen3.6-plus                | main/global           |
-| `medicine_healthcare` | qwen3.6-plus           | owl-alpha                   | main/global           |
+| `software_it`   | ring-2.6-1t                | cobuddy:free                | deepseek-v4-flash → owl-alpha |
+| `math`          | deepseek-v4-flash         | owl-alpha                   | ring-2.6-1t           |
+| `science`       | deepseek-v4-flash         | owl-alpha                   | ring-2.6-1t           |
+| `business_finance` | deepseek-v4-flash      | owl-alpha                   | ring-2.6-1t           |
+| `legal_government` | owl-alpha              | deepseek-v4-flash           | main/global           |
+| `medicine_healthcare` | deepseek-v4-flash    | owl-alpha                   | ring-2.6-1t           |
 | `writing_language` | owl-alpha               | step-3.5-flash              | main/global           |
 | `entertainment_media` | step-3.5-flash         | owl-alpha                   | main/global           |
 
@@ -305,8 +305,8 @@ topic_detect:
       fallbacks:
         - provider: openrouter
           model: baidu/cobuddy:free
-        - provider: nous
-          model: qwen/qwen3.6-plus
+        - provider: openrouter
+          model: deepseek/deepseek-v4-flash:free
 ```
 
 ---

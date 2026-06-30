@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.2.2 - 2026-06-30
+
+### Fixed
+- Refreshed installer default routing away from stale/unavailable defaults (`nemotron-3`, `gpt-oss`, and paid `qwen3.6-plus`) to the current free/known-good ARC chain: `ring-2.6-1t`, `cobuddy`, `deepseek-v4-flash`, `owl-alpha`, and `step-3.5-flash` by topic.
+- New installs now seed topic-scoped fallback chains instead of only a primary model, while preserving existing user-customized topic routes.
+- Smoke tests are now also pytest-collectable, so `python -m pytest tests` catches regressions instead of exiting with “no tests collected”.
+
+### Verified
+- Checked Hermes Agent v0.17.0 upstream `b6045170`; active runtime already has all ARC markers (`runtime_override`, fallback-chain, skipdetect rewrite, provider transform, structured signature) and needs no additional patch.
+
 ## 2.2.1 - 2026-06-22
 
 ### Verified

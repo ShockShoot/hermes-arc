@@ -45,5 +45,9 @@ def main() -> None:
         raise SystemExit(f"{len(failures)} failures")
 
 
+def test_v2_classifier_cases() -> None:
+    main()
+
+
 if __name__ == "__main__":
     main()

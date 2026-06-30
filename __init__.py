@@ -4,13 +4,22 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from .agent_loader import get_agent_prompt
-from .classifier import classify
-from .config import load_config
-from .semantic import semantic_classify
-from .signature import build_final_signature, build_signature
-from .state import TopicState
-from .update_checker import maybe_log_update_notice
+try:
+    from .agent_loader import get_agent_prompt
+    from .classifier import classify
+    from .config import load_config
+    from .semantic import semantic_classify
+    from .signature import build_final_signature, build_signature
+    from .state import TopicState
+    from .update_checker import maybe_log_update_notice
+except ImportError:  # pragma: no cover - direct script/pytest import fallback
+    from agent_loader import get_agent_prompt
+    from classifier import classify
+    from config import load_config
+    from semantic import semantic_classify
+    from signature import build_final_signature, build_signature
+    from state import TopicState
+    from update_checker import maybe_log_update_notice
 
 logger = logging.getLogger("topic_detect")
 

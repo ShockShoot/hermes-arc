@@ -510,15 +510,22 @@ def env_key_available(name: str) -> bool:
 
 OPENROUTER_KEY_AVAILABLE = env_key_available(OPENROUTER_KEY_ENV)
 
-def target(model: str) -> dict:
+def target(model: str, provider: str = "openrouter", fallbacks: list[dict] | None = None) -> dict:
     data = {
-        "provider": "openrouter",
+        "provider": provider,
         "model": model,
-        "base_url": OPENROUTER_BASE,
     }
-    if OPENROUTER_KEY_AVAILABLE:
-        data["api_key"] = OPENROUTER_KEY
+    if provider == "openrouter":
+        data["base_url"] = OPENROUTER_BASE
+        if OPENROUTER_KEY_AVAILABLE:
+            data["api_key"] = OPENROUTER_KEY
+    if fallbacks is not None:
+        data["fallbacks"] = fallbacks
     return data
+
+
+def fallback(provider: str, model: str) -> dict:
+    return {"provider": provider, "model": model}
 
 ensure("enabled", True, section)
 ensure("routing_mode", "hybrid", section)
@@ -586,18 +593,49 @@ if "default" in section:
     changed = True
     print("   🧹 Removed stale topic_detect.default (no longer needed)")
 
-nemotron = "nvidia/nemotron-3-super-120b-a12b:free"
+ring = "inclusionai/ring-2.6-1t:free"
+cobuddy = "baidu/cobuddy:free"
+deepseek_flash = "deepseek/deepseek-v4-flash:free"
 owl = "openrouter/owl-alpha"
-gpt_oss = "openai/gpt-oss-120b:free"
+step_flash = "stepfun/step-3.5-flash"
 required_topics = {
-    "software_it": nemotron,
-    "math": owl,
-    "science": owl,
-    "business_finance": owl,
-    "legal_government": owl,
-    "medicine_healthcare": owl,
-    "writing_language": gpt_oss,
-    "entertainment_media": owl,
+    "software_it": target(
+        ring,
+        fallbacks=[
+            fallback("openrouter", cobuddy),
+            fallback("openrouter", deepseek_flash),
+            fallback("openrouter", owl),
+        ],
+    ),
+    "math": target(
+        deepseek_flash,
+        fallbacks=[fallback("openrouter", owl), fallback("openrouter", ring)],
+    ),
+    "science": target(
+        deepseek_flash,
+        fallbacks=[fallback("openrouter", owl), fallback("openrouter", ring)],
+    ),
+    "business_finance": target(
+        deepseek_flash,
+        fallbacks=[fallback("openrouter", owl), fallback("openrouter", ring)],
+    ),
+    "legal_government": target(
+        owl,
+        fallbacks=[fallback("openrouter", deepseek_flash)],
+    ),
+    "medicine_healthcare": target(
+        deepseek_flash,
+        fallbacks=[fallback("openrouter", owl), fallback("openrouter", ring)],
+    ),
+    "writing_language": target(
+        owl,
+        fallbacks=[fallback("nous", step_flash)],
+    ),
+    "entertainment_media": target(
+        step_flash,
+        provider="nous",
+        fallbacks=[fallback("openrouter", owl)],
+    ),
 }
 
 # Older ARC versions shipped 12 topics. When a user installs the new 8-topic
@@ -665,16 +703,18 @@ for tname, tval in list(topics.items()):
                 changed = True
                 print(f"   🧹 Removed unresolved api_key from topics.{tname}")
 
-for name, model in required_topics.items():
+for name, default_topic in required_topics.items():
     current = topics.get(name)
     if current is None:
-        topics[name] = target(model)
+        topics[name] = default_topic
         changed = True
     elif isinstance(current, dict):
         # Preserve user choices. If provider/model are intentionally missing or
         # empty, keep that topic as a graceful fallback-to-main route.
         if current.get("provider") and current.get("model"):
-            for k, v in target(model).items():
+            for k, v in default_topic.items():
+                # Preserve existing user fallback choices. Only seed fallback chains for
+                # freshly-created topics or topics where the key is explicitly absent.
                 if k not in current or current[k] is None:
                     current[k] = v
                     changed = True
