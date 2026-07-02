@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.2.3 - 2026-07-02
+
+### Verified
+- Checked Hermes Agent v0.18.0 upstream `2068754d`; the split-runtime patch targets (`agent/conversation_loop.py`, `agent/turn_context.py`, and `agent/turn_finalizer.py`) already pass all ARC compatibility checks: runtime override collection, `switch_model()` routing, response suffix/signature finalization, provider-aware transform hooks, topic fallback chains, and skipdetect message rewrite.
+
+### Changed
+- Release metadata refreshed so ARC update checks report the latest verified Hermes compatibility window after the July 2026 Hermes update.
+
 ## 2.2.2 - 2026-06-30
 
 ### Fixed
