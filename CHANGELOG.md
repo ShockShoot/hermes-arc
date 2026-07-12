@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.4 - 2026-07-12
+
+### Fixed
+- Updated the split-runtime patcher for Hermes Agent v0.18.2, whose `pre_llm_call` result loop now includes oversized hook-context spilling. ARC now injects runtime override handling around that upstream shape without deleting its spill safeguards.
+- Added regression coverage for the v0.18 hook shape and patch idempotence.
+
+### Verified
+- Checked Hermes Agent v0.18.2 (`2026.7.7.2`, upstream `7b5ba205`): the unpatched update needs ARC compatibility changes in `agent/turn_context.py` and `agent/turn_finalizer.py`; the updated patcher applies and verifies all ARC markers across every supported runtime entry path.
+
 ## 2.2.3 - 2026-07-02
 
 ### Verified

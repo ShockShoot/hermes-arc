@@ -262,6 +262,7 @@ FILES=(
   docs/V2_REWRITE_PLAN.md
   docs/V3_SMART_ROUTER.md
   tests/test_fallback_config.py
+  tests/test_patcher_v018.py
   tests/test_release_metadata.py
   tests/test_signature_finalize.py
   tests/test_skipdetect.py

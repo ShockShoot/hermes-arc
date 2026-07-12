@@ -1192,8 +1192,96 @@ def _patch_split_turn_context(text: str) -> str:
     except Exception as exc:
         logger.warning("pre_llm_call hook failed: %s", exc)
 '''
-    if "HERMES_ARC_PATCH: collect runtime_override dicts" not in new and hook_old in new:
-        new = new.replace(hook_old, hook_new, 1)
+    if "HERMES_ARC_PATCH: collect runtime_override dicts" not in new:
+        if hook_old in new:
+            new = new.replace(hook_old, hook_new, 1)
+        else:
+            # Hermes v0.18 keeps the same hook lifecycle but added oversized
+            # hook-context spilling inside the result loop. Patch the stable
+            # statements independently so that upstream safety logic remains
+            # intact instead of replacing the whole hook block.
+            init_old = '''    # Plugin hook: pre_llm_call (context injected into user message, not system prompt).
+    plugin_user_context = ""
+    try:
+'''
+            init_new = '''    # Plugin hook: pre_llm_call (context injected into user message, not system prompt).
+    plugin_user_context = ""
+    # HERMES_ARC_PATCH: collect runtime_override dicts returned by router plugins.
+    _runtime_override = {}
+    try:
+'''
+            if init_old in new:
+                new = new.replace(init_old, init_new, 1)
+
+            kwargs_old = '''            model=agent.model,
+            platform=getattr(agent, "platform", None) or "",
+'''
+            kwargs_new = '''            model=agent.model,
+            provider=getattr(agent, "provider", ""),
+            base_url=getattr(agent, "base_url", ""),
+            api_mode=getattr(agent, "api_mode", ""),
+            platform=getattr(agent, "platform", None) or "",
+'''
+            if kwargs_old in new:
+                new = new.replace(kwargs_old, kwargs_new, 1)
+
+            loop_old = '''        for r in _pre_results:
+            _piece: str = ""
+            if isinstance(r, dict) and r.get("context"):
+'''
+            loop_new = '''        for r in _pre_results:
+            _piece: str = ""
+            if isinstance(r, dict):
+                _arc_ov = r.get("runtime_override")
+                if isinstance(_arc_ov, dict):
+                    _runtime_override.update(_arc_ov)
+            if isinstance(r, dict) and r.get("context"):
+'''
+            if loop_old in new:
+                new = new.replace(loop_old, loop_new, 1)
+
+            context_old = '''        if _ctx_parts:
+            plugin_user_context = "\\n\\n".join(_ctx_parts)
+    except Exception as exc:
+'''
+            context_new = '''        _arc_sys = _runtime_override.get("system_prompt")
+        if _arc_sys:
+            _ctx_parts.append(str(_arc_sys))  # HERMES_ARC_SYSTEM_PROMPT_PATCH
+        _arc_user_message = _runtime_override.get("user_message")
+        if isinstance(_arc_user_message, str):
+            user_message = _arc_user_message
+            original_user_message = _arc_user_message
+            try:
+                messages[current_turn_user_idx]["content"] = _arc_user_message
+                agent._persist_user_message_override = _arc_user_message
+            except Exception:
+                pass  # HERMES_ARC_SKIPDETECT_PATCH
+        if isinstance(_runtime_override, dict) and _runtime_override:
+            if not hasattr(agent, "_hermes_arc_base_runtime"):
+                agent._hermes_arc_base_runtime = {"model": getattr(agent, "model", ""), "provider": getattr(agent, "provider", ""), "base_url": getattr(agent, "base_url", ""), "api_key": getattr(agent, "api_key", ""), "api_mode": getattr(agent, "api_mode", ""), "fallback_chain": list(getattr(agent, "_fallback_chain", []) or [])}
+            _arc_model = _runtime_override.get("model") or getattr(agent, "model", "")
+            _arc_provider = _runtime_override.get("provider") or getattr(agent, "provider", "")
+            if _arc_model or _arc_provider:
+                try:
+                    _arc_primary_snapshot = getattr(agent, "_primary_runtime", None)
+                    agent.switch_model(_arc_model, _arc_provider, _runtime_override.get("api_key") or getattr(agent, "api_key", ""), _runtime_override.get("base_url") or "", _runtime_override.get("api_mode") or "")
+                    if isinstance(_arc_primary_snapshot, dict):
+                        agent._primary_runtime = _arc_primary_snapshot
+                except Exception as _arc_switch_exc:
+                    logger.warning("HERMES_ARC_PATCH: runtime override switch failed: %s", _arc_switch_exc)
+            if "fallback_chain" in _runtime_override:
+                _arc_chain = _runtime_override.get("fallback_chain")
+                agent._fallback_chain = list(_arc_chain) if isinstance(_arc_chain, list) else []  # HERMES_ARC_TOPIC_FALLBACK_PATCH
+                agent._fallback_index = 0
+                agent._fallback_activated = False
+            _arc_signature = _runtime_override.get("_arc_signature")
+            agent._hermes_arc_signature = dict(_arc_signature) if isinstance(_arc_signature, dict) else None  # HERMES_ARC_RESPONSE_SUFFIX_PATCH
+        if _ctx_parts:
+            plugin_user_context = "\\n\\n".join(_ctx_parts)
+    except Exception as exc:
+'''
+            if context_old in new:
+                new = new.replace(context_old, context_new, 1)
     return new
 
 def _patch_split_turn_finalizer(text: str) -> str:
