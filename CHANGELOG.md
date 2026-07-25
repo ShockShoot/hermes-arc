@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.2.5 - 2026-07-25
+
+### Fixed
+- Updated split-runtime compatibility for Hermes Agent v0.19.0 while preserving its hook-output spilling, `api_content` prompt-cache sidecar, and early turn persistence safeguards.
+- Preserve Hermes v0.19's `requested_provider` identity when restoring the main runtime after an ARC-routed turn.
+- Detect structured ARC signature support in split runtimes where the marker lives in `agent/turn_finalizer.py`, so the plugin uses final-model-aware structured metadata instead of the legacy process-global fallback.
+
+### Verified
+- Checked Hermes Agent v0.19.0 (`2026.7.20`, upstream `6ad632bf9bfabda2d4bed2606f953654e81e3859`): the unpatched runtime needs ARC changes in `agent/turn_context.py` and `agent/turn_finalizer.py`; the updated patcher applies cleanly and resolves all supported entry paths to the same three-file compatibility surface.
+
 ## 2.2.4 - 2026-07-12
 
 ### Fixed

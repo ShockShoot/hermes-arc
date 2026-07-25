@@ -136,7 +136,16 @@ def _core_supports_response_suffix() -> bool:
             _CORE_RESPONSE_SUFFIX_SUPPORTED = False
             return False
 
-        source = run_agent_path.read_text(encoding="utf-8", errors="ignore")
+        runtime_files = [
+            run_agent_path,
+            run_agent_path.parent / "agent" / "conversation_loop.py",
+            run_agent_path.parent / "agent" / "turn_finalizer.py",
+        ]
+        source = "\n".join(
+            path.read_text(encoding="utf-8", errors="ignore")
+            for path in runtime_files
+            if path.is_file()
+        )
         _CORE_RESPONSE_SUFFIX_SUPPORTED = "HERMES_ARC_RESPONSE_SUFFIX_PATCH" in source
     except Exception as exc:
         logger.debug("topic_detect: response_suffix support detection failed: %s", exc)

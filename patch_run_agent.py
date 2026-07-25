@@ -1087,6 +1087,7 @@ def _patch_split_turn_context(text: str) -> str:
                     or getattr(agent, "api_mode", "") != _arc_base_runtime.get("api_mode")):
                 _arc_primary_snapshot = getattr(agent, "_primary_runtime", None)
                 agent.switch_model(_arc_base_runtime.get("model") or getattr(agent, "model", ""), _arc_base_runtime.get("provider") or getattr(agent, "provider", ""), _arc_base_runtime.get("api_key") or getattr(agent, "api_key", ""), _arc_base_runtime.get("base_url") or "", _arc_base_runtime.get("api_mode") or "")
+                agent.requested_provider = _arc_base_runtime.get("requested_provider") or getattr(agent, "provider", "")
                 if isinstance(_arc_primary_snapshot, dict):
                     agent._primary_runtime = _arc_primary_snapshot
             agent._fallback_chain = list(_arc_base_runtime.get("fallback_chain") or [])
@@ -1169,7 +1170,7 @@ def _patch_split_turn_context(text: str) -> str:
                 pass  # HERMES_ARC_SKIPDETECT_PATCH
         if isinstance(_runtime_override, dict) and _runtime_override:
             if not hasattr(agent, "_hermes_arc_base_runtime"):
-                agent._hermes_arc_base_runtime = {"model": getattr(agent, "model", ""), "provider": getattr(agent, "provider", ""), "base_url": getattr(agent, "base_url", ""), "api_key": getattr(agent, "api_key", ""), "api_mode": getattr(agent, "api_mode", ""), "fallback_chain": list(getattr(agent, "_fallback_chain", []) or [])}
+                agent._hermes_arc_base_runtime = {"model": getattr(agent, "model", ""), "provider": getattr(agent, "provider", ""), "requested_provider": getattr(agent, "requested_provider", ""), "base_url": getattr(agent, "base_url", ""), "api_key": getattr(agent, "api_key", ""), "api_mode": getattr(agent, "api_mode", ""), "fallback_chain": list(getattr(agent, "_fallback_chain", []) or [])}
             _arc_model = _runtime_override.get("model") or getattr(agent, "model", "")
             _arc_provider = _runtime_override.get("provider") or getattr(agent, "provider", "")
             if _arc_model or _arc_provider:
@@ -1258,7 +1259,7 @@ def _patch_split_turn_context(text: str) -> str:
                 pass  # HERMES_ARC_SKIPDETECT_PATCH
         if isinstance(_runtime_override, dict) and _runtime_override:
             if not hasattr(agent, "_hermes_arc_base_runtime"):
-                agent._hermes_arc_base_runtime = {"model": getattr(agent, "model", ""), "provider": getattr(agent, "provider", ""), "base_url": getattr(agent, "base_url", ""), "api_key": getattr(agent, "api_key", ""), "api_mode": getattr(agent, "api_mode", ""), "fallback_chain": list(getattr(agent, "_fallback_chain", []) or [])}
+                agent._hermes_arc_base_runtime = {"model": getattr(agent, "model", ""), "provider": getattr(agent, "provider", ""), "requested_provider": getattr(agent, "requested_provider", ""), "base_url": getattr(agent, "base_url", ""), "api_key": getattr(agent, "api_key", ""), "api_mode": getattr(agent, "api_mode", ""), "fallback_chain": list(getattr(agent, "_fallback_chain", []) or [])}
             _arc_model = _runtime_override.get("model") or getattr(agent, "model", "")
             _arc_provider = _runtime_override.get("provider") or getattr(agent, "provider", "")
             if _arc_model or _arc_provider:
