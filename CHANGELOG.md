@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.2.6 - 2026-08-13
+
+### Fixed
+- Updated split-runtime finalizer patching for Hermes Agent v0.20.0, which now records `_pre_transform_response` before replacing transformed output; ARC anchors signature finalization on the stable loop break instead of the older exact block.
+- Tightened compatibility checks so the signature stash in `turn_context.py` cannot falsely report that `turn_finalizer.py` renders structured ARC signatures.
+- Restore `requested_provider` on every base-runtime restoration, including turns where the live model/provider already match but requested identity is stale.
+
+### Verified
+- Checked Hermes Agent v0.20.0 at upstream `04d82221158ac8b3f801e9736809b54b9f1d613f`: pristine split targets require ARC changes, the patch applies once, a second application is idempotent, and all patched runtime files compile.
+
 ## 2.2.5 - 2026-07-25
 
 ### Fixed

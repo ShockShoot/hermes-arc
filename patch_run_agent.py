@@ -310,6 +310,7 @@ def check_runtime_override_handling(content: str) -> dict:
     results["handles_response_suffix"] = bool(
         "HERMES_ARC_RESPONSE_SUFFIX_PATCH" in content
         and "_arc_signature" in content
+        and "_arc_suffix_results" in content
     )
     results["sends_provider_in_transform_hook"] = bool(
         re.search(r'transform_llm_output.*provider\s*=\s*(?:self|agent)\.provider', content, re.DOTALL)
@@ -1087,9 +1088,9 @@ def _patch_split_turn_context(text: str) -> str:
                     or getattr(agent, "api_mode", "") != _arc_base_runtime.get("api_mode")):
                 _arc_primary_snapshot = getattr(agent, "_primary_runtime", None)
                 agent.switch_model(_arc_base_runtime.get("model") or getattr(agent, "model", ""), _arc_base_runtime.get("provider") or getattr(agent, "provider", ""), _arc_base_runtime.get("api_key") or getattr(agent, "api_key", ""), _arc_base_runtime.get("base_url") or "", _arc_base_runtime.get("api_mode") or "")
-                agent.requested_provider = _arc_base_runtime.get("requested_provider") or getattr(agent, "provider", "")
                 if isinstance(_arc_primary_snapshot, dict):
                     agent._primary_runtime = _arc_primary_snapshot
+            agent.requested_provider = _arc_base_runtime.get("requested_provider") or getattr(agent, "provider", "")
             agent._fallback_chain = list(_arc_base_runtime.get("fallback_chain") or [])
             agent._fallback_index = 0
             agent._fallback_activated = False
@@ -1098,6 +1099,36 @@ def _patch_split_turn_context(text: str) -> str:
 '''
     if "HERMES_ARC_PATCH: runtime_override support for Hermes' split turn prologue" not in new and start_old in new:
         new = new.replace(start_old, start_new, 1)
+    # Upgrade ARC <=2.2.5 in place. That patch restored requested_provider
+    # only when switch_model() ran, so an already-matching live runtime could
+    # retain stale requested identity across turns.
+    requested_provider_old = '''                agent.switch_model(_arc_base_runtime.get("model") or getattr(agent, "model", ""), _arc_base_runtime.get("provider") or getattr(agent, "provider", ""), _arc_base_runtime.get("api_key") or getattr(agent, "api_key", ""), _arc_base_runtime.get("base_url") or "", _arc_base_runtime.get("api_mode") or "")
+                agent.requested_provider = _arc_base_runtime.get("requested_provider") or getattr(agent, "provider", "")
+                if isinstance(_arc_primary_snapshot, dict):
+                    agent._primary_runtime = _arc_primary_snapshot
+'''
+    requested_provider_new = '''                agent.switch_model(_arc_base_runtime.get("model") or getattr(agent, "model", ""), _arc_base_runtime.get("provider") or getattr(agent, "provider", ""), _arc_base_runtime.get("api_key") or getattr(agent, "api_key", ""), _arc_base_runtime.get("base_url") or "", _arc_base_runtime.get("api_mode") or "")
+                if isinstance(_arc_primary_snapshot, dict):
+                    agent._primary_runtime = _arc_primary_snapshot
+            agent.requested_provider = _arc_base_runtime.get("requested_provider") or getattr(agent, "provider", "")
+'''
+    if requested_provider_old in new:
+        new = new.replace(requested_provider_old, requested_provider_new, 1)
+    else:
+        # Repair v2.2.5 placement: requested_provider must be restored even when
+        # the live model/provider already match the base runtime.
+        requested_provider_old = '''                agent.requested_provider = _arc_base_runtime.get("requested_provider") or getattr(agent, "provider", "")
+                if isinstance(_arc_primary_snapshot, dict):
+                    agent._primary_runtime = _arc_primary_snapshot
+            agent._fallback_chain = list(_arc_base_runtime.get("fallback_chain") or [])
+'''
+        requested_provider_new = '''                if isinstance(_arc_primary_snapshot, dict):
+                    agent._primary_runtime = _arc_primary_snapshot
+            agent.requested_provider = _arc_base_runtime.get("requested_provider") or getattr(agent, "provider", "")
+            agent._fallback_chain = list(_arc_base_runtime.get("fallback_chain") or [])
+'''
+        if requested_provider_old in new:
+            new = new.replace(requested_provider_old, requested_provider_new, 1)
     hook_old = '''    # Plugin hook: pre_llm_call (context injected into user message, not system prompt).
     plugin_user_context = ""
     try:
@@ -1308,18 +1339,8 @@ def _patch_split_turn_finalizer(text: str) -> str:
 '''
     if "HERMES_ARC_TRANSFORM_PROVIDER_PATCH" not in new and transform_old in new:
         new = new.replace(transform_old, transform_new, 1)
-    suffix_old = '''            for _hook_result in _transform_results:
-                if isinstance(_hook_result, str) and _hook_result:
-                    final_response = _hook_result
-                    _response_transformed = True
-                    break  # First non-empty string wins
-'''
-    suffix_new = '''            for _hook_result in _transform_results:
-                if isinstance(_hook_result, str) and _hook_result:
-                    final_response = _hook_result
-                    _response_transformed = True
-                    break  # First non-empty string wins
-            # HERMES_ARC_RESPONSE_SUFFIX_PATCH: render structured ARC signature exactly once.
+    suffix_anchor = '                    break  # First non-empty string wins\n'
+    suffix_block = '''            # HERMES_ARC_RESPONSE_SUFFIX_PATCH: render structured ARC signature exactly once.
             _arc_signature = getattr(agent, "_hermes_arc_signature", None)
             if isinstance(_arc_signature, dict):
                 _arc_suffix_results = _invoke_hook("transform_llm_output", response_text="", session_id=agent.session_id or "", model=agent.model, provider=agent.provider, base_url=agent.base_url, api_mode=agent.api_mode, platform=getattr(agent, "platform", None) or "", _arc_finalize=_arc_signature)
@@ -1330,8 +1351,8 @@ def _patch_split_turn_finalizer(text: str) -> str:
                         break
                 agent._hermes_arc_signature = None
 '''
-    if "HERMES_ARC_RESPONSE_SUFFIX_PATCH" not in new and suffix_old in new:
-        new = new.replace(suffix_old, suffix_new, 1)
+    if "HERMES_ARC_RESPONSE_SUFFIX_PATCH" not in new and suffix_anchor in new:
+        new = new.replace(suffix_anchor, suffix_anchor + suffix_block, 1)
     return new
 
 def apply_split_runtime_patch(files: list[Path]) -> dict[Path, str]:
