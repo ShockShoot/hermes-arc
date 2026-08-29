@@ -20,6 +20,7 @@ ARC คือ Hermes Agent plugin ที่ route แต่ละ turn ไปย
 - **ปัญหา:** default model ตัวเดียวไม่ใช่ตัวเลือกที่ถูกสุดหรือเก่งสุดสำหรับทุกงาน
 - **แนวทาง:** ตรวจ action/intent ก่อน แล้วใช้ subject/topic เป็นตัวช่วยตัดสินใจ
 - **สถานะตอนนี้:** ใช้งานได้จริงแบบ plugin; `patch_run_agent.py` เป็น compatibility bridge ชั่วคราว
+- **Compatibility:** ตรวจสอบแล้วกับ Hermes Agent v0.20.6 (`2026.8.27`, `ac6c8028e00d01ee2f299ba7fd03329c7f10382d`)
 - **ทาง upstream:** หลัง NousResearch/hermes-agent#23898 merge แล้ว ARC จะถอด patch และใช้ native plugin runtime override ได้
 - **ทิศทางถัดไป:** smart routing ที่ดู complexity, cost/latency, hardware awareness และ external router integration
 

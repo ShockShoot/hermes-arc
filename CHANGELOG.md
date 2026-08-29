@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.2.7 - 2026-08-29
+
+### Verified
+- Checked Hermes Agent v0.20.6 (`2026.8.27`) at upstream `ac6c8028e00d01ee2f299ba7fd03329c7f10382d`: the pristine split runtime still requires ARC compatibility patches, and the existing patcher applies cleanly across `agent/turn_context.py` and `agent/turn_finalizer.py`.
+- Confirmed a second patch application is byte-for-byte idempotent, all patched runtime files compile, the active runtime passes every ARC compatibility marker, and the ARC test suite passes all 13 tests.
+
+### Changed
+- Refreshed release metadata and English/Thai compatibility documentation for the latest verified Hermes runtime.
+
 ## 2.2.6 - 2026-08-13
 
 ### Fixed
