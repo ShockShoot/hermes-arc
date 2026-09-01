@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.2.8 - 2026-09-01
+
+### Verified
+- Checked Hermes Agent v0.21.0 (`2026.8.31`) at upstream `3ca096de5f8183cb2e0ec23673f294d5978656a3`: pristine core still lacks native plugin runtime overrides, while the ARC patcher applies cleanly to the split runtime and verifies every routing, fallback, skipdetect, provider-transform, and structured-signature marker.
+- Confirmed the patched pristine v0.21.0 targets are byte-for-byte identical to the active patched runtime, a second application is idempotent, and all patched runtime files compile.
+
+### Changed
+- Added a v0.21 regression fixture that preserves the new route-aware preflight token-estimation code around the `pre_llm_call` hook while ARC inserts its compatibility layer.
+- Updated CI and contributor instructions to run the complete pytest regression suite instead of only the legacy smoke scripts.
+- Refreshed release metadata and English/Thai compatibility documentation for Hermes v0.21.0.
+
 ## 2.2.7 - 2026-08-29
 
 ### Verified

@@ -20,7 +20,7 @@ ARC คือ Hermes Agent plugin ที่ route แต่ละ turn ไปย
 - **ปัญหา:** default model ตัวเดียวไม่ใช่ตัวเลือกที่ถูกสุดหรือเก่งสุดสำหรับทุกงาน
 - **แนวทาง:** ตรวจ action/intent ก่อน แล้วใช้ subject/topic เป็นตัวช่วยตัดสินใจ
 - **สถานะตอนนี้:** ใช้งานได้จริงแบบ plugin; `patch_run_agent.py` เป็น compatibility bridge ชั่วคราว
-- **Compatibility:** ตรวจสอบแล้วกับ Hermes Agent v0.20.6 (`2026.8.27`, `ac6c8028e00d01ee2f299ba7fd03329c7f10382d`)
+- **Compatibility:** ตรวจสอบแล้วกับ Hermes Agent v0.21.0 (`2026.8.31`, `3ca096de5f8183cb2e0ec23673f294d5978656a3`)
 - **ทาง upstream:** หลัง NousResearch/hermes-agent#23898 merge แล้ว ARC จะถอด patch และใช้ native plugin runtime override ได้
 - **ทิศทางถัดไป:** smart routing ที่ดู complexity, cost/latency, hardware awareness และ external router integration
 
@@ -371,13 +371,11 @@ topic_detect: signature=- gemma-4-31b [software_it]
 ```bash
 python -m pip install -r requirements-test.txt
 python -m compileall . -q
-python tests/test_v2_classifier.py
-python tests/test_signature_finalize.py
-python tests/test_fallback_config.py
-python tests/test_skipdetect.py
+python -m pytest -o 'addopts=' -q
+python tests/test_release_metadata.py
 ```
 
-ตอนนี้ `requirements-test.txt` มี `PyYAML` เพราะ config loader ของ plugin import `yaml`
+`requirements-test.txt` มี `PyYAML` สำหรับ config loader และ `pytest` สำหรับ regression suite ทั้งชุด
 
 ---
 

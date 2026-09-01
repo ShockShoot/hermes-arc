@@ -20,7 +20,7 @@ ARC is a Hermes Agent plugin that routes each turn to a configured specialist mo
 - **Problem:** one default model is not always the cheapest or strongest choice for every task.
 - **Approach:** detect the user's action first, then use the subject/topic as a tiebreaker.
 - **Current status:** works today as a plugin; `patch_run_agent.py` is a temporary compatibility bridge.
-- **Compatibility:** verified against Hermes Agent v0.20.6 (`2026.8.27`, `ac6c8028e00d01ee2f299ba7fd03329c7f10382d`).
+- **Compatibility:** verified against Hermes Agent v0.21.0 (`2026.8.31`, `3ca096de5f8183cb2e0ec23673f294d5978656a3`).
 - **Upstream path:** once NousResearch/hermes-agent#23898 lands, ARC can drop the patch and use native plugin runtime overrides.
 - **Next direction:** smart routing with complexity, cost/latency, hardware awareness, and external router integrations.
 
@@ -371,13 +371,11 @@ Runtime plugin files intentionally stay importable without packaging, but tests 
 ```bash
 python -m pip install -r requirements-test.txt
 python -m compileall . -q
-python tests/test_v2_classifier.py
-python tests/test_signature_finalize.py
-python tests/test_fallback_config.py
-python tests/test_skipdetect.py
+python -m pytest -o 'addopts=' -q
+python tests/test_release_metadata.py
 ```
 
-`requirements-test.txt` currently contains `PyYAML`, which is needed because the plugin config loader imports `yaml`.
+`requirements-test.txt` contains `PyYAML` for the plugin config loader and `pytest` for the full regression suite.
 
 ---
 
