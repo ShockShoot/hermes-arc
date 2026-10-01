@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.2 - 2026-10-01
+
+### Fixed
+- Replace ARC's retired default OpenRouter model IDs with catalog-listed free models. Reinstall/update migrates only known ARC-shipped IDs and leaves custom model selections intact; free-model capacity can still be rate-limited upstream.
+- Installer can provision PyYAML with `uv` when Hermes' managed Python lacks it.
+
 ## 2.3.1 - 2026-10-01
 
 ### Fixed

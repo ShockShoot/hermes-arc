@@ -97,6 +97,43 @@ def test_installer_config_uses_selected_profile(tmp_path, monkeypatch):
     assert "api_key" not in installed["topic_detect"]["semantic"]
 
 
+@pytest.mark.parametrize("semantic_model", ["baidu/cobuddy:free", "openrouter/owl-alpha"])
+def test_installer_migrates_retired_models_without_touching_custom_targets(tmp_path, semantic_model):
+    import yaml
+
+    profile = tmp_path / "profile"
+    profile.mkdir()
+    config_path = profile / "config.yaml"
+    config_path.write_text(f'''topic_detect:
+  semantic:
+    model: {semantic_model}
+  topics:
+    software_it:
+      provider: openrouter
+      model: inclusionai/ring-2.6-1t:free
+      fallbacks:
+        - provider: openrouter
+          model: deepseek/deepseek-v4-flash:free
+        - provider: openrouter
+          model: baidu/cobuddy:free
+    custom:
+      provider: openrouter
+      model: user/custom-model
+''')
+    script = (ROOT / "install.sh").read_text()
+    marker = '  "${YAML_PYTHON[@]}" - "${CONFIG_PATH}" "${PLUGIN_DIR}" <<\'PY\'\n'
+    code = script.split(marker, 1)[1].split("\nPY\n", 1)[0]
+    plugin_dir = profile / "plugins/topic_detect"
+    result = subprocess.run([sys.executable, "-c", code, str(config_path), str(plugin_dir)],
+                            capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    section = yaml.safe_load(config_path.read_text())["topic_detect"]
+    assert section["topics"]["software_it"]["model"] == "cohere/north-mini-code:free"
+    assert section["topics"]["software_it"]["fallbacks"] == [{"provider": "openrouter", "model": "poolside/laguna-s-2.1:free"}]
+    assert section["semantic"]["model"] == "google/gemma-4-26b-a4b-it:free"
+    assert section["topics"]["custom"]["model"] == "user/custom-model"
+
+
 def test_semantic_reason_is_not_logged(tmp_path, monkeypatch, caplog):
     from types import SimpleNamespace
 

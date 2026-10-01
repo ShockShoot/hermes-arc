@@ -20,7 +20,7 @@ ARC is a Hermes Agent plugin that routes each turn to a configured specialist mo
 - **Problem:** one default model is not always the cheapest or strongest choice for every task.
 - **Approach:** detect the user's action first, then use the subject/topic as a tiebreaker.
 - **Current status:** works today as a plugin; `patch_run_agent.py` is a temporary compatibility bridge.
-- **Compatibility:** tested against Hermes Agent v0.21.5 (`2026.9.24`, upstream `bd394e2a`); the updated compatibility patch targets the extracted turn hook and finalizer helpers.
+- **Compatibility:** tested against Hermes Agent v0.21.5 (`2026.9.24`, upstream `bd394e2a`); the updated compatibility patch targets the extracted turn hook and finalizer helpers. Installer defaults are catalog-listed free models as of 2026-10-01; free-model availability and rate limits can change without notice.
 - **Upstream path:** once NousResearch/hermes-agent#23898 lands, ARC can drop the patch and use native plugin runtime overrides.
 - **Next direction:** smart routing with complexity, cost/latency, hardware awareness, and external router integrations.
 
@@ -68,7 +68,7 @@ Example signatures:
 - minimax-m2.5 [business_finance]
 - glm-4.5-air [entertainment_media]
 - gpt-5.5 [general]
-- gemini-3-flash [software_it | routed: ring-2.6-1t]
+- gemini-3-flash [software_it | routed: north-mini-code]
 ```
 
 Internally, ARC still uses `none` for “no specialist topic matched.” The user-facing signature renders that as `[general]` because it is clearer.
@@ -98,7 +98,7 @@ Shown suffix: - gpt-5.5 [general]
 
 User: debug this server, but the routed model falls back in Hermes
 ARC:  route=software_it, final responder differs from requested route model
-Shown suffix: - gemini-3-flash [software_it | routed: ring-2.6-1t]
+Shown suffix: - gemini-3-flash [software_it | routed: north-mini-code]
 
 User: /sd fix this failing API test
 ARC:  skip classification and routing for this turn → main model
@@ -131,7 +131,7 @@ primary model  →  topic fallback 1  →  topic fallback 2  →  ...  →  Herm
 Example signature when a fallback fires:
 
 ```text
-gemini-3-flash [software_it | routed: ring-2.6-1t]
+gemini-3-flash [software_it | routed: north-mini-code]
 ```
 
 This means ARC wanted `software_it`, but the final response came from `gemini-3-flash` after the primary fell back.
@@ -143,26 +143,26 @@ topic_detect:
   topics:
     software_it:
       provider: openrouter
-      model: inclusionai/ring-2.6-1t:free
+      model: cohere/north-mini-code:free
       fallbacks:
         - provider: openrouter
-          model: baidu/cobuddy:free
+          model: poolside/laguna-s-2.1:free
         - provider: openrouter
-          model: deepseek/deepseek-v4-flash:free
+          model: google/gemma-4-31b-it:free
 ```
 
 Default fallback chain recommendations (adjust to your budget and latency needs):
 
 | Topic           | Primary                    | Fallback 1                  | Fallback 2            |
 |-----------------|----------------------------|-----------------------------|-----------------------|
-| `software_it`   | ring-2.6-1t                | cobuddy:free                | deepseek-v4-flash → owl-alpha |
-| `math`          | deepseek-v4-flash         | owl-alpha                   | ring-2.6-1t           |
-| `science`       | deepseek-v4-flash         | owl-alpha                   | ring-2.6-1t           |
-| `business_finance` | deepseek-v4-flash      | owl-alpha                   | ring-2.6-1t           |
-| `legal_government` | owl-alpha              | deepseek-v4-flash           | main/global           |
-| `medicine_healthcare` | deepseek-v4-flash    | owl-alpha                   | ring-2.6-1t           |
-| `writing_language` | owl-alpha               | step-3.5-flash              | main/global           |
-| `entertainment_media` | step-3.5-flash         | owl-alpha                   | main/global           |
+| `software_it` | north-mini-code:free | laguna-s-2.1:free | gemma-4-31b-it:free |
+| `math` | nemotron-3-super:free | gemma-4-31b-it:free | laguna-s-2.1:free |
+| `science` | nemotron-3-super:free | gemma-4-31b-it:free | laguna-s-2.1:free |
+| `business_finance` | nemotron-3-super:free | gemma-4-31b-it:free | laguna-s-2.1:free |
+| `legal_government` | gemma-4-31b-it:free | nemotron-3-super:free | main/global |
+| `medicine_healthcare` | gemma-4-31b-it:free | nemotron-3-super:free | main/global |
+| `writing_language` | gemma-4-31b-it:free | gemma-4-26b-a4b-it:free | main/global |
+| `entertainment_media` | gemma-4-26b-a4b-it:free | gemma-4-31b-it:free | main/global |
 
 ---
 
@@ -234,7 +234,7 @@ topic_detect:
   semantic:
     enabled: true
     provider: openrouter
-    model: baidu/cobuddy:free
+    model: poolside/laguna-s-2.1:free
     min_confidence: 0.7
     base_url: https://openrouter.ai/api/v1
     api_key: ${OPENROUTER_API_KEY}
@@ -252,7 +252,7 @@ topic_detect:
       api_key: ${OPENROUTER_API_KEY}
       fallbacks:
         - provider: openrouter
-          model: baidu/cobuddy:free
+          model: poolside/laguna-s-2.1:free
           base_url: https://openrouter.ai/api/v1
           api_key: ${OPENROUTER_API_KEY}
     math:
@@ -301,12 +301,12 @@ topic_detect:
   topics:
     software_it:
       provider: openrouter
-      model: inclusionai/ring-2.6-1t:free
+      model: cohere/north-mini-code:free
       fallbacks:
         - provider: openrouter
-          model: baidu/cobuddy:free
+          model: poolside/laguna-s-2.1:free
         - provider: openrouter
-          model: deepseek/deepseek-v4-flash:free
+          model: google/gemma-4-31b-it:free
 ```
 
 ---

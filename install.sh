@@ -572,7 +572,10 @@ elif not isinstance(semantic, dict):
     sys.exit(1)
 ensure("enabled", True, semantic)
 ensure("provider", "openrouter", semantic)
-ensure("model", "baidu/cobuddy:free", semantic)
+ensure("model", "google/gemma-4-26b-a4b-it:free", semantic)
+if semantic.get("provider") == "openrouter" and semantic.get("model") in ("baidu/cobuddy:free", "openrouter/owl-alpha"):
+    semantic["model"] = "google/gemma-4-26b-a4b-it:free"
+    changed = True
 ensure("min_confidence", 0.70, semantic)
 ensure("base_url", OPENROUTER_BASE, semantic)
 if OPENROUTER_KEY_AVAILABLE:
@@ -622,49 +625,20 @@ if "default" in section:
     changed = True
     print("   🧹 Removed stale topic_detect.default (no longer needed)")
 
-ring = "inclusionai/ring-2.6-1t:free"
-cobuddy = "baidu/cobuddy:free"
-deepseek_flash = "deepseek/deepseek-v4-flash:free"
-owl = "openrouter/owl-alpha"
-step_flash = "stepfun/step-3.5-flash"
+code_model = "cohere/north-mini-code:free"
+poolside = "poolside/laguna-s-2.1:free"
+nemotron = "nvidia/nemotron-3-super-120b-a12b:free"
+gemma = "google/gemma-4-31b-it:free"
+gemma_fast = "google/gemma-4-26b-a4b-it:free"
 required_topics = {
-    "software_it": target(
-        ring,
-        fallbacks=[
-            fallback("openrouter", cobuddy),
-            fallback("openrouter", deepseek_flash),
-            fallback("openrouter", owl),
-        ],
-    ),
-    "math": target(
-        deepseek_flash,
-        fallbacks=[fallback("openrouter", owl), fallback("openrouter", ring)],
-    ),
-    "science": target(
-        deepseek_flash,
-        fallbacks=[fallback("openrouter", owl), fallback("openrouter", ring)],
-    ),
-    "business_finance": target(
-        deepseek_flash,
-        fallbacks=[fallback("openrouter", owl), fallback("openrouter", ring)],
-    ),
-    "legal_government": target(
-        owl,
-        fallbacks=[fallback("openrouter", deepseek_flash)],
-    ),
-    "medicine_healthcare": target(
-        deepseek_flash,
-        fallbacks=[fallback("openrouter", owl), fallback("openrouter", ring)],
-    ),
-    "writing_language": target(
-        owl,
-        fallbacks=[fallback("nous", step_flash)],
-    ),
-    "entertainment_media": target(
-        step_flash,
-        provider="nous",
-        fallbacks=[fallback("openrouter", owl)],
-    ),
+    "software_it": target(code_model, fallbacks=[fallback("openrouter", poolside), fallback("openrouter", gemma)]),
+    "math": target(nemotron, fallbacks=[fallback("openrouter", gemma), fallback("openrouter", poolside)]),
+    "science": target(nemotron, fallbacks=[fallback("openrouter", gemma), fallback("openrouter", poolside)]),
+    "business_finance": target(nemotron, fallbacks=[fallback("openrouter", gemma), fallback("openrouter", poolside)]),
+    "legal_government": target(gemma, fallbacks=[fallback("openrouter", nemotron)]),
+    "medicine_healthcare": target(gemma, fallbacks=[fallback("openrouter", nemotron)]),
+    "writing_language": target(gemma, fallbacks=[fallback("openrouter", gemma_fast)]),
+    "entertainment_media": target(gemma_fast, fallbacks=[fallback("openrouter", gemma)]),
 }
 
 # Older ARC versions shipped 12 topics. When a user installs the new 8-topic
@@ -731,6 +705,47 @@ for tname, tval in list(topics.items()):
                 del tval["api_key"]
                 changed = True
                 print(f"   🧹 Removed unresolved api_key from topics.{tname}")
+
+# Replace only exact ARC-shipped model IDs removed from OpenRouter's catalog.
+# Custom user models and unrelated providers stay untouched.
+retired_fallbacks = {
+    "inclusionai/ring-2.6-1t:free": code_model,
+    "baidu/cobuddy:free": poolside,
+    "deepseek/deepseek-v4-flash:free": poolside,
+    "openrouter/owl-alpha": gemma,
+}
+retired_primaries = set(retired_fallbacks)
+
+def migrate_target(item, *, preferred=None):
+    global changed
+    if not isinstance(item, dict):
+        return
+    provider, model = item.get("provider"), item.get("model")
+    if provider == "openrouter" and model in retired_primaries:
+        item["model"] = preferred or retired_fallbacks[model]
+        changed = True
+    elif provider == "nous" and model == "stepfun/step-3.5-flash":
+        item.update(provider="openrouter", model=preferred or gemma_fast, base_url=OPENROUTER_BASE)
+        if OPENROUTER_KEY_AVAILABLE:
+            item["api_key"] = OPENROUTER_KEY
+        changed = True
+
+for name, item in topics.items():
+    if not isinstance(item, dict):
+        continue
+    preferred = required_topics[name]["model"] if name in required_topics else None
+    migrate_target(item, preferred=preferred)
+    fallback_list = item.get("fallbacks")
+    if isinstance(fallback_list, list):
+        for fallback_item in fallback_list:
+            migrate_target(fallback_item)
+        unique = []
+        for candidate in fallback_list:
+            if candidate not in unique:
+                unique.append(candidate)
+        if len(unique) != len(fallback_list):
+            item["fallbacks"] = unique
+            changed = True
 
 for name, default_topic in required_topics.items():
     current = topics.get(name)
