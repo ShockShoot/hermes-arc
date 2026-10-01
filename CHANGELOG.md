@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.2.9 - 2026-10-01
+
+### Fixed
+- Adapted ARC patching to Hermes v0.21.5's extracted `pre_llm_call` and output-transform helpers. Runtime routing, topic fallbacks, `/sd` message rewriting, and final-model signatures now attach at the live execution seams.
+- Restored the main runtime before the next turn's hook, adopted later user-initiated model switches, and preserved Hermes' primary-runtime snapshot during specialist switches. The patcher validates syntax and required markers, stages both backups, and rolls back runtime writes on failure.
+- Passed the current provider into `pre_llm_call` so unrouted signatures do not falsely appear as fallback responses.
+
+### Verified
+- Exercised routing, fallback, skip, and single signature behavior against the installed Hermes v0.21.5 source; the ARC test suite passes.
+
 ## 2.2.8 - 2026-09-01
 
 ### Verified
