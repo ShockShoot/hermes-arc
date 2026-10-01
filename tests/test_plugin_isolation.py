@@ -85,7 +85,7 @@ def test_installer_config_uses_selected_profile(tmp_path, monkeypatch):
     syntax = subprocess.run(["bash", "-n", str(ROOT / "install.sh")], capture_output=True, text=True)
     assert syntax.returncode == 0, syntax.stderr
     assert 'if [[ "${CONFIG_PATH_EXPLICIT}" == true && "${PLUGIN_DIR_EXPLICIT}" != true ]]; then\n  PLUGIN_DIR="$(dirname "${CONFIG_PATH}")/plugins/topic_detect"' in script
-    start = '  python3 - "${CONFIG_PATH}" "${PLUGIN_DIR}" <<\'PY\'\n'
+    start = '  "${YAML_PYTHON[@]}" - "${CONFIG_PATH}" "${PLUGIN_DIR}" <<\'PY\'\n'
     code = script.split(start, 1)[1].split("\nPY\n", 1)[0]
     env = dict(os.environ, HERMES_HOME=str(profile))
     env.pop("OPENROUTER_API_KEY", None)

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.3.1 - 2026-10-01
+
+### Fixed
+- Load runtime YAML via PyYAML when present or Hermes' bundled `ruamel.yaml` otherwise. Hermes v0.21.5 no longer bundles PyYAML, so the 2.3.0 plugin could fail to register even though unit tests passed.
+- Bundle the YAML compatibility module in the installer, declare both hooks in the manifest, and verify registration with Hermes Plugin Doctor.
+
 ## 2.3.0 - 2026-10-01
 
 ### Fixed

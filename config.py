@@ -5,7 +5,11 @@ from pathlib import Path
 from typing import Any
 
 import os
-import yaml
+
+try:
+    from .yaml_compat import safe_load
+except ImportError:  # direct script/pytest import
+    from yaml_compat import safe_load
 
 
 def hermes_home() -> Path:
@@ -98,7 +102,7 @@ def _target_from_dict(data: dict[str, Any]) -> Target | None:
 def load_config() -> TopicDetectConfig:
     path = hermes_home() / "config.yaml"
 
-    raw = yaml.safe_load(path.read_text()) or {}
+    raw = safe_load(path.read_text()) or {}
 
     section = raw.get("topic_detect", {})
 

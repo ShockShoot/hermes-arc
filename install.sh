@@ -58,12 +58,24 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Hermes' managed Python bundles ruamel.yaml but not necessarily PyYAML.
+# Use an ephemeral uv interpreter for the installer YAML operations if needed.
+YAML_PYTHON=(python3)
+if ! python3 -c 'import yaml' >/dev/null 2>&1; then
+  if command -v uv >/dev/null 2>&1; then
+    YAML_PYTHON=(uv run --no-project --with pyyaml python)
+  else
+    echo "❌ PyYAML is required for installation (install it, or install uv for automatic provision)."
+    exit 1
+  fi
+fi
+
 get_yaml_version() {
   local path_or_url="$1"
   if [[ "$path_or_url" == http://* || "$path_or_url" == https://* ]]; then
-    curl -fsSL "$path_or_url" 2>/dev/null | python3 -c 'import sys,yaml; print((yaml.safe_load(sys.stdin.read()) or {}).get("version","0.0.0"))'
+    curl -fsSL "$path_or_url" 2>/dev/null | "${YAML_PYTHON[@]}" -c 'import sys,yaml; print((yaml.safe_load(sys.stdin.read()) or {}).get("version","0.0.0"))'
   elif [[ -f "$path_or_url" ]]; then
-    python3 -c 'import sys,yaml,pathlib; print((yaml.safe_load(pathlib.Path(sys.argv[1]).read_text()) or {}).get("version","0.0.0"))' "$path_or_url"
+    "${YAML_PYTHON[@]}" -c 'import sys,yaml,pathlib; print((yaml.safe_load(pathlib.Path(sys.argv[1]).read_text()) or {}).get("version","0.0.0"))' "$path_or_url"
   else
     echo "0.0.0"
   fi
@@ -178,7 +190,7 @@ if [[ "${CHECK_ONLY}" == true ]]; then
       PLUGIN_DIR="$(dirname "${HERMES_CONFIG_DISCOVERED}")/plugins/topic_detect"
     fi
   fi
-  if ! python3 - <<'PY' >/dev/null 2>&1
+  if ! "${YAML_PYTHON[@]}" - <<'PY' >/dev/null 2>&1
 import yaml
 PY
   then echo "❌ PyYAML is required for --check"; exit 1; fi
@@ -251,6 +263,7 @@ FILES=(
   classifier.py
   semantic.py
   config.py
+  yaml_compat.py
   agent_loader.py
   signature.py
   patch_run_agent.py
@@ -426,7 +439,7 @@ if [[ "${CONFIGURE}" == true ]]; then
   echo "🧩 Ensuring Hermes config has topic_detect settings..."
   mkdir -p "$(dirname "${CONFIG_PATH}")"
 
-  python3 - "${CONFIG_PATH}" "${PLUGIN_DIR}" <<'PY'
+  "${YAML_PYTHON[@]}" - "${CONFIG_PATH}" "${PLUGIN_DIR}" <<'PY'
 from __future__ import annotations
 
 import shutil

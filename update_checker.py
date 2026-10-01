@@ -7,7 +7,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
+try:
+    from .yaml_compat import safe_load
+except ImportError:  # direct script/pytest import
+    from yaml_compat import safe_load
 
 logger = logging.getLogger("topic_detect")
 
@@ -51,7 +54,7 @@ def _read_local_version(plugin_yaml_path: str | Path | None = None) -> str:
     if plugin_yaml_path is None:
         plugin_yaml_path = Path(__file__).with_name("plugin.yaml")
     path = Path(plugin_yaml_path).expanduser()
-    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    data = safe_load(path.read_text(encoding="utf-8")) or {}
     return str(data.get("version") or "0.0.0")
 
 
@@ -62,7 +65,7 @@ def _read_remote_version(url: str, timeout: float = 2.5) -> str:
     )
     with urllib.request.urlopen(request, timeout=timeout) as response:
         body = response.read(128_000).decode("utf-8", errors="replace")
-    data = yaml.safe_load(body) or {}
+    data = safe_load(body) or {}
     return str(data.get("version") or "0.0.0")
 
 

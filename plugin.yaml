@@ -1,6 +1,7 @@
 name: topic_detect
-version: 2.3.0
+version: 2.3.1
 description: Dynamic intent-based runtime model router with topic fallbacks and skipdetect/sd bypass for Hermes
 entrypoint: topic_detect
-hooks:
+provides_hooks:
   - pre_llm_call
+  - transform_llm_output
