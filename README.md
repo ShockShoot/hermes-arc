@@ -194,7 +194,7 @@ Hermes core pre_llm_call runtime override
 curl -fsSL https://raw.githubusercontent.com/ShockShoot/hermes-arc/main/install.sh | bash
 ```
 
-This same command is also the normal update/repatch command after `hermes update`: it downloads the latest ARC files, refreshes config, and auto-applies the runtime patch when exactly one Hermes `run_agent.py` is found. If multiple Hermes runtimes are installed and the installer is attached to a terminal, it opens an arrow-key selector (↑/↓, Enter). In non-interactive shells, pass `--run-agent-path /path/to/run_agent.py` to choose explicitly.
+This same command is also the normal update/repatch command after `hermes update`: it downloads the latest ARC files, refreshes the active profile's config, and auto-applies the runtime patch when exactly one Hermes `run_agent.py` is found. If multiple Hermes runtimes are installed and the installer is attached to a terminal, it opens an arrow-key selector (↑/↓, Enter). In non-interactive shells, pass `--run-agent-path /path/to/run_agent.py` to choose explicitly. ARC loads configuration and personas from the active `$HERMES_HOME`; use `--plugin-dir` and `--config-path` when installing into a different profile explicitly.
 
 Check for updates without installing:
 
@@ -231,7 +231,6 @@ topic_detect:
   routing_mode: hybrid
   inertia: 2
   min_confidence: 0.45
-  agents_file: ~/.hermes/plugins/topic_detect/AGENTS.md
   semantic:
     enabled: true
     provider: openrouter

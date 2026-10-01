@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.3.0 - 2026-10-01
+
+### Fixed
+- Load ARC settings and persona from the active Hermes profile rather than always using `~/.hermes`; the installer seeds and migrates its persona path for the selected plugin directory, keeps explicit config targets in the correct profile, and never restarts a different profile's gateway.
+- Isolate routing inertia and legacy response signatures per session, so concurrent chats cannot change one another's route or label. Classify the current user turn rather than replaying an unrelated historical intent (ordinary chat stays on the main model).
+- Stop logging runtime overrides and raw conversation text (which could include provider API keys and private prompts).
+
+### Verified
+- Profile config, installer migration, concurrent-session routing/signatures, log redaction, and Hermes v0.21.5 compatibility are covered by the full pytest suite.
+
 ## 2.2.9 - 2026-10-01
 
 ### Fixed

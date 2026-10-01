@@ -231,7 +231,6 @@ topic_detect:
   routing_mode: hybrid
   inertia: 2
   min_confidence: 0.45
-  agents_file: ~/.hermes/plugins/topic_detect/AGENTS.md
   semantic:
     enabled: true
     provider: openrouter

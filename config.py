@@ -8,6 +8,15 @@ import os
 import yaml
 
 
+def hermes_home() -> Path:
+    """Resolve the active Hermes profile, including in gateway multiplex mode."""
+    try:
+        from hermes_constants import get_hermes_home
+        return get_hermes_home()
+    except ImportError:  # standalone plugin tests / older Hermes installs
+        return Path(os.environ.get("HERMES_HOME") or Path.home() / ".hermes").expanduser()
+
+
 @dataclass
 class Target:
     provider: str
@@ -87,7 +96,7 @@ def _target_from_dict(data: dict[str, Any]) -> Target | None:
 
 
 def load_config() -> TopicDetectConfig:
-    path = Path.home() / ".hermes" / "config.yaml"
+    path = hermes_home() / "config.yaml"
 
     raw = yaml.safe_load(path.read_text()) or {}
 
@@ -166,9 +175,13 @@ def load_config() -> TopicDetectConfig:
     agents_file = str(
         section.get(
             "agents_file",
-            "~/.hermes/plugins/topic_detect/AGENTS.md",
+            str(hermes_home() / "plugins" / "topic_detect" / "AGENTS.md"),
         )
     )
+    # Older installers wrote a literal default-profile path. Treat that
+    # particular value as a default, not a custom cross-profile persona.
+    if agents_file == "~/.hermes/plugins/topic_detect/AGENTS.md":
+        agents_file = str(hermes_home() / "plugins" / "topic_detect" / "AGENTS.md")
 
     topics_data = section.get("topics", {})
 

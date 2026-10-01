@@ -38,7 +38,9 @@ topic_detect:
     )
 
     old_home = os.environ.get("HOME")
+    old_hermes_home = os.environ.get("HERMES_HOME")
     os.environ["HOME"] = str(home)
+    os.environ["HERMES_HOME"] = str(home / ".hermes")
     try:
         def fail_classify(messages):
             raise AssertionError("/skipdetect must bypass classifier")
@@ -71,6 +73,10 @@ topic_detect:
             os.environ.pop("HOME", None)
         else:
             os.environ["HOME"] = old_home
+        if old_hermes_home is None:
+            os.environ.pop("HERMES_HOME", None)
+        else:
+            os.environ["HERMES_HOME"] = old_hermes_home
 
 # Test prefix stripping for all short and full variants
 for pfx in ("/sd", "!sd", "@@sd", "/skipdetect", "!skipdetect", "@@skipdetect"):

@@ -42,7 +42,9 @@ topic_detect:
     )
 
     old_home = os.environ.get("HOME")
+    old_hermes_home = os.environ.get("HERMES_HOME")
     os.environ["HOME"] = str(home)
+    os.environ["HERMES_HOME"] = str(home / ".hermes")
     try:
         cfg = load_config()
     finally:
@@ -50,6 +52,10 @@ topic_detect:
             os.environ.pop("HOME", None)
         else:
             os.environ["HOME"] = old_home
+        if old_hermes_home is None:
+            os.environ.pop("HERMES_HOME", None)
+        else:
+            os.environ["HERMES_HOME"] = old_hermes_home
 
 software = cfg.topics["software_it"]
 assert software.provider == "openrouter"

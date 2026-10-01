@@ -227,6 +227,11 @@ if [[ "${CONFIG_PATH_EXPLICIT}" != true || "${PLUGIN_DIR_EXPLICIT}" != true ]]; 
     fi
   fi
 fi
+# An explicit config target identifies the profile unless a plugin directory
+# was also explicitly selected. Do not seed a persona path into another profile.
+if [[ "${CONFIG_PATH_EXPLICIT}" == true && "${PLUGIN_DIR_EXPLICIT}" != true ]]; then
+  PLUGIN_DIR="$(dirname "${CONFIG_PATH}")/plugins/topic_detect"
+fi
 
 echo ""
 echo "🧊 Hermes ARC (Adaptive Routing Core) — Installer"
@@ -265,6 +270,9 @@ FILES=(
   tests/test_patcher_v018.py
   tests/test_patcher_v019.py
   tests/test_patcher_v020.py
+  tests/test_patcher_v021.py
+  tests/test_patcher_v0215.py
+  tests/test_plugin_isolation.py
   tests/test_release_metadata.py
   tests/test_signature_finalize.py
   tests/test_skipdetect.py
@@ -418,7 +426,7 @@ if [[ "${CONFIGURE}" == true ]]; then
   echo "🧩 Ensuring Hermes config has topic_detect settings..."
   mkdir -p "$(dirname "${CONFIG_PATH}")"
 
-  python3 - "${CONFIG_PATH}" <<'PY'
+  python3 - "${CONFIG_PATH}" "${PLUGIN_DIR}" <<'PY'
 from __future__ import annotations
 
 import shutil
@@ -499,7 +507,7 @@ OPENROUTER_KEY = "${OPENROUTER_API_KEY}"
 def env_key_available(name: str) -> bool:
     if os.environ.get(name):
         return True
-    env_path = Path.home() / ".hermes" / ".env"
+    env_path = path.parent / ".env"
     if not env_path.exists():
         return False
     for line in env_path.read_text(encoding="utf-8", errors="ignore").splitlines():
@@ -534,7 +542,12 @@ ensure("enabled", True, section)
 ensure("routing_mode", "hybrid", section)
 ensure("inertia", 2, section)
 ensure("min_confidence", 0.45, section)
-ensure("agents_file", "~/.hermes/plugins/topic_detect/AGENTS.md", section)
+legacy_agents_file = "~/.hermes/plugins/topic_detect/AGENTS.md"
+plugin_agents_file = str(Path(sys.argv[2]).expanduser() / "AGENTS.md")
+if section.get("agents_file") == legacy_agents_file and plugin_agents_file != str(Path(legacy_agents_file).expanduser()):
+    section["agents_file"] = plugin_agents_file
+    changed = True
+ensure("agents_file", plugin_agents_file, section)
 
 semantic = section.get("semantic")
 if semantic is None:
@@ -740,7 +753,7 @@ else
 fi
 
 # ── Verify .env exists ─────────────────────────────────────────────────────
-ENV_FILE="${HOME}/.hermes/.env"
+ENV_FILE="$(dirname "${CONFIG_PATH}")/.env"
 if [[ ! -f "${ENV_FILE}" ]]; then
   echo "⚠️  No .env found at ${ENV_FILE}"
   echo "   Create one with your API keys:"
@@ -748,17 +761,19 @@ if [[ ! -f "${ENV_FILE}" ]]; then
   echo ""
 fi
 
-# ── Enable plugin ───────────────────────────────────────────────────────────
-echo "🔧 Enabling plugin..."
-hermes plugins enable topic_detect 2>&1 || true
-echo ""
-
-# ── Restart ─────────────────────────────────────────────────────────────────
-if [[ "${RESTART}" == true ]]; then
-  echo "🔄 Restarting Hermes gateway..."
-  hermes gateway restart 2>&1 || true
-  echo ""
+# ── Enable/restart only the selected active profile ─────────────────────────
+ACTIVE_CONFIG_PATH="$(hermes config path 2>/dev/null | awk '/config\.yaml$/ {print; exit}' || true)"
+if [[ -n "${ACTIVE_CONFIG_PATH}" ]] && [[ "$(python3 -c 'import os,sys; print(os.path.realpath(os.path.expanduser(sys.argv[1])))' "${ACTIVE_CONFIG_PATH}")" == "$(python3 -c 'import os,sys; print(os.path.realpath(os.path.expanduser(sys.argv[1])))' "${CONFIG_PATH}")" ]]; then
+  echo "🔧 Enabling plugin in the active profile..."
+  hermes plugins enable topic_detect 2>&1 || true
+  if [[ "${RESTART}" == true ]]; then
+    echo "🔄 Restarting Hermes gateway..."
+    hermes gateway restart 2>&1 || true
+  fi
+else
+  echo "ℹ️  Target is not the active Hermes profile; config enables ARC, but its gateway was not restarted."
 fi
+echo ""
 
 # ── Done ────────────────────────────────────────────────────────────────────
 echo "─────────────────────────────────────────────"

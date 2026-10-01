@@ -3,13 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 
-DEFAULT_AGENTS_FILE = (
-    Path.home()
-    / ".hermes"
-    / "plugins"
-    / "topic_detect"
-    / "AGENTS.md"
-)
+try:
+    from .config import hermes_home
+except ImportError:  # direct script/pytest import fallback
+    from config import hermes_home
+
+
+def default_agents_file() -> Path:
+    return hermes_home() / "plugins" / "topic_detect" / "AGENTS.md"
 
 
 def load_agents(
@@ -18,7 +19,7 @@ def load_agents(
     p = (
         Path(path).expanduser()
         if path
-        else DEFAULT_AGENTS_FILE
+        else default_agents_file()
     )
 
     if not p.exists():
